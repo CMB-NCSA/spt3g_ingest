@@ -2,6 +2,8 @@
 
 import argparse
 import os
+import logging
+import time
 from spt3g_ingest import ingstools
 
 
@@ -40,7 +42,10 @@ if __name__ == "__main__":
                             log_format=args.log_format,
                             log_format_date=args.log_format_date)
 
+    logger = logging.getLogger(__name__)
+
     # Loop over all of the files
+    t0 = time.time()
     for g3file in args.files:
         basename = ingstools.get_g3basename(g3file)
         if args.compress:
@@ -50,3 +55,4 @@ if __name__ == "__main__":
 
         ingstools.convert_to_fits(g3file, fitsfile, overwrite=args.clobber,
                                   compress=args.compress)
+        logger.info(f"Total time: {ingstools.elapsed_time(t0)}")
