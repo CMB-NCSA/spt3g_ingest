@@ -2,8 +2,10 @@
 
 import argparse
 import os
+import sys
 import logging
 import time
+import subprocess
 from spt3g_ingest import ingstools
 
 
@@ -17,7 +19,11 @@ def cmdline():
     parser.add_argument("--clobber", action='store_true', default=False,
                         help="Clobber output files")
     parser.add_argument("--compress", action='store_true', default=False,
-                        help="Compress (gz) output files")
+                        help="Compress (gzip) output files")
+    parser.add_argument("--fpack", action='store_true', default=False,
+                        help="Fpack output fits file")
+    parser.add_argument("--fpack_options", action="store", default='-g2',
+                        help="Fpack options")
 
     # Logging options (loglevel/log_format/log_format_date)
     default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
@@ -29,7 +35,13 @@ def cmdline():
                         help="Format for logging")
     parser.add_argument("--log_format_date", action="store", type=str, default=default_log_format_date,
                         help="Format for date section of logging")
+
     args = parser.parse_args()
+
+    # Make sure we do --compress or --fpack
+    if args.compress and args.fpack:
+        sys.exit("ERROR: cannot use both --compress and -fpack")
+
     return args
 
 
@@ -55,4 +67,15 @@ if __name__ == "__main__":
 
         ingstools.convert_to_fits(g3file, fitsfile, overwrite=args.clobber,
                                   compress=args.compress)
+
+        if args.fpack:
+            if args.clobber and os.path.isfile(fitsfile+'.fz'):
+                os.remove(fitsfile+'.fz')
+
+            cmd = f"fpack {args.fpack_options} {fitsfile}"
+            logger.info(f"running: {cmd}")
+            return_code = subprocess.call(cmd, shell=True)
+            logger.info(f"Created: {fitsfile}.fz")
+            os.remove(fitsfile)
+
         logger.info(f"Total time: {ingstools.elapsed_time(t0)}")
