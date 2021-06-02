@@ -28,14 +28,27 @@ def convert_to_fits(g3file, fitsfile=None, outpath='',
 
     f1 = core.G3File(g3file)
     logger.info(f"Loading: {g3file}")
+
+    metadata = {}
     for frame in f1:
+        # Extract metadata
+        if frame.type == core.G3FrameType.Observation:
+            # TODO add metadata from frame
+            for k in iter(frame):
+                metadata[k] = frame[k]
+
         if frame.type == core.G3FrameType.Map:
+            for k in iter(frame):
+                metadata[k] = frame[k]
+            # TODO add metadata from frame
             t0 = time.time()
             logger.info(f"type: {frame.type} -- Id: {frame['Id']}")
             maps.fitsio.save_skymap_fits(fitsfile, frame['T'],
                                          overwrite=overwrite, compress=compress)
             logger.info(f"Created: {fitsfile}")
             logger.info(f"Creation time: {elapsed_time(t0)}")
+
+    return metadata
 
 
 def get_g3basename(g3file):

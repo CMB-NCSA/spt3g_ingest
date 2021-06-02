@@ -65,8 +65,11 @@ if __name__ == "__main__":
         else:
             fitsfile = os.path.join(args.outdir, basename+".fits")
 
-        ingstools.convert_to_fits(g3file, fitsfile, overwrite=args.clobber,
-                                  compress=args.compress)
+        metadata = ingstools.convert_to_fits(g3file, fitsfile,
+                                             overwrite=args.clobber,
+                                             compress=args.compress)
+
+        # Here we should insert metadata into the FITS headers
 
         if args.fpack:
             if args.clobber and os.path.isfile(fitsfile+'.fz'):
