@@ -72,6 +72,7 @@ def convert_to_fits(g3file, fitsfile=None, outpath='',
         # Convert to FITS
         if frame.type == core.G3FrameType.Map:
             logger.info(f"Transforming to FITS: {frame.type} -- Id: {frame['Id']}")
+            maps.RemoveWeights(frame, zero_nans=True)
             maps.fitsio.save_skymap_fits(fitsfile, frame['T'], overwrite=overwrite,
                                          compress=compress, hdr=hdr)
             logger.info(f"Created: {fitsfile}")
