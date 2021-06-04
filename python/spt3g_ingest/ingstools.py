@@ -6,8 +6,37 @@ import sys
 import time
 import logging
 from logging.handlers import RotatingFileHandler
+from astropy.time import Time
 
 LOGGER = logging.getLogger(__name__)
+
+# Mapping of metadata to FITS keywords
+_keywords_map = {'ObservationStart': ('DATE-BEG', 'Observation start date'),
+                 'ObservationStop': ('DATE-END', 'Observation end date'),
+                 'ObservationID': ('OBS-ID', 'Observation ID'),
+                 'Id': ('BAND', 'Band name'),
+                 'SourceName': ('OBJECT', 'Name of object'),
+                 }
+
+
+def extract_metadata_frame(frame, metadata=None, logger=None):
+    """
+    Extract selected metadata from a g3 frame
+    """
+
+    # Loop over all items and select only the ones in the Mapping
+    if not metadata:
+        metadata = {}
+    for k in iter(frame):
+        if k in _keywords_map.keys():
+            keyword = _keywords_map[k][0]
+            # Need to re-cast GETime objects
+            if type(frame[k]) == core.G3Time:
+                gtime = Time(frame[k].isoformat(), format='isot', scale='utc').isot
+                metadata[keyword] = (gtime, _keywords_map[k][1])
+            else:
+                metadata[keyword] = (frame[k], _keywords_map[k][1])
+    return metadata
 
 
 def convert_to_fits(g3file, fitsfile=None, outpath='',
@@ -26,29 +55,29 @@ def convert_to_fits(g3file, fitsfile=None, outpath='',
         logger.warning(f"File exists, skipping: {fitsfile}")
         return
 
-    f1 = core.G3File(g3file)
+    g3 = core.G3File(g3file)
     logger.info(f"Loading: {g3file}")
 
-    metadata = {}
-    for frame in f1:
-        # Extract metadata
-        if frame.type == core.G3FrameType.Observation:
-            # TODO add metadata from frame
-            for k in iter(frame):
-                metadata[k] = frame[k]
+    # Loop over to extract metadata, we can only loop once over the g3 object,
+    # and this loop relies on Map being the last frame of the g3 object
+    hdr = {}
+    t0 = time.time()
+    for frame in g3:
 
+        # Extract metadata
+        if frame.type == core.G3FrameType.Observation or frame.type == core.G3FrameType.Map:
+            logger.info(f"Extracting metadata from frame: {frame.type}")
+            hdr = extract_metadata_frame(frame, hdr)
+
+        # Convert to FITS
         if frame.type == core.G3FrameType.Map:
-            for k in iter(frame):
-                metadata[k] = frame[k]
-            # TODO add metadata from frame
-            t0 = time.time()
-            logger.info(f"type: {frame.type} -- Id: {frame['Id']}")
-            maps.fitsio.save_skymap_fits(fitsfile, frame['T'],
-                                         overwrite=overwrite, compress=compress)
+            logger.info(f"Transforming to FITS: {frame.type} -- Id: {frame['Id']}")
+            maps.fitsio.save_skymap_fits(fitsfile, frame['T'], overwrite=overwrite,
+                                         compress=compress, hdr=hdr)
             logger.info(f"Created: {fitsfile}")
             logger.info(f"Creation time: {elapsed_time(t0)}")
 
-    return metadata
+    return
 
 
 def get_g3basename(g3file):
