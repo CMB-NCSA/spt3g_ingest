@@ -5,10 +5,10 @@ Fd = OrderedDict()
 
 # From file info not in header
 # INGESTION_ID is unique per table
-Fd['ID'] = 'VARCHAR(100)'
-Fd['INGESTION_DATE'] = 'VARCHAR(20)'
-Fd['FILENAME'] = 'VARCHAR(200)'
-Fd['FILEPATH'] = 'VARCHAR(200)'
+Fd['ID'] = 'TEXT'
+Fd['INGESTION_DATE'] = 'TEXT'
+Fd['FILENAME'] = 'TEXT'
+Fd['FILEPATH'] = 'TEXT'
 
 # From header
 Fd['NAXIS1'] = 'INT'
