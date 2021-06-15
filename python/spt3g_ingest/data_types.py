@@ -5,9 +5,10 @@ Fd = OrderedDict()
 
 # From file info not in header
 # INGESTION_ID is unique per table
-Fd['INGESTION_ID'] = 'INT'
-Fd['FILENAME'] = 'VARCHAR(100)'
-Fd['PARENT'] = 'VARCHAR(100)'
+Fd['ID'] = 'VARCHAR(100)'
+Fd['INGESTION_DATE'] = 'VARCHAR(20)'
+Fd['FILENAME'] = 'VARCHAR(200)'
+Fd['FILEPATH'] = 'VARCHAR(200)'
 
 # From header
 Fd['NAXIS1'] = 'INT'
@@ -40,6 +41,8 @@ Fd['COORDREF'] = 'VARCHAR(15)'
 Fd['POLAR'] = 'VARCHAR(1)'
 Fd['UNITS'] = 'VARCHAR(10)'
 Fd['WEIGHTED'] = 'VARCHAR(1)'
+Fd['PARENT'] = 'VARCHAR(100)'
+Fd['FITSNAME'] = 'VARCHAR(100)'
 Fd['DATE_BEG'] = 'TEXT'
 Fd['DATE_END'] = 'TEXT'
 Fd['OBJECT'] = 'VARCHAR(30)'

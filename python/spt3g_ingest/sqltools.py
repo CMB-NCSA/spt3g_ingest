@@ -1,5 +1,7 @@
 
+import os
 from astropy.io import fits
+from astropy.time import Time
 import sqlite3
 from spt3g_ingest.data_types import Fd
 import logging
@@ -14,8 +16,16 @@ for k in Fd.keys():
 # remove last comma
 _table_statement = _table_statement.rstrip(',\n')
 
+# Template to insert a row
+_insert_row = """
+INSERT INTO {tablename} values ({values})
+"""
+
 
 def read_header(fitsfile):
+    """
+    Read in the FITS file header using astropy.fits
+    """
     if fitsfile.endswith('.fz'):
         hdu = 1
     else:
@@ -23,6 +33,32 @@ def read_header(fitsfile):
     F = fits.open(fitsfile)
     header = F[hdu].header
     return header
+
+
+def fix_fits_keywords(header):
+    """
+    Update header keyword to change '-' by '_' as columns with '-' are not
+    allowed on SQL
+    """
+    new_header = {}
+    for key in header.keys():
+        new_key = key.replace('-', '_')
+        new_header[new_key] = header[key]
+    return new_header
+
+
+def extract_values_header(header):
+
+    # Create the ingested values in the same order,
+    # starting for those 3 keys by hand
+    values = []
+    for k in Fd.keys():
+        try:
+            values.append(str(header[k]))
+        except KeyError:
+            pass
+            logger.debug('{} Not Found'.format(k))
+    return values
 
 
 def connect_db(dbname, tablename='FILE_INFO_V0'):
@@ -46,6 +82,51 @@ def connect_db(dbname, tablename='FILE_INFO_V0'):
     cur.execute(create_table)
     con.commit()
     return con
+
+
+def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None):
+    """ Ingest file into an sqlite3 table"""
+
+    # Make new connection if not available
+    if not con:
+        con = sqlite3.connect(dbname)
+    # Get cursor
+    cur = con.cursor()
+
+    logger.info(f"Ingesting {fitsfile} to: {tablename}")
+
+    # Read in the header
+    header = read_header(fitsfile)
+    # Fix the keywords in the header
+    header = fix_fits_keywords(header)
+    # print(header)
+
+    # Extra metadata for ingestion
+    ID = os.path.basename(fitsfile).split('.fits')[0]
+    FILENAME = os.path.basename(fitsfile)
+    FILEPATH = os.path.dirname(fitsfile)
+    INGESTION_DATE = Time.now().isot
+
+    # Create the ingested values in the same order,
+    # starting for those 3 keys by hand
+    values = []
+    values.append(ID)  # ID
+    values.append(FILENAME)  # FILENAME
+    values.append(FILEPATH)  # FILEPATH
+    values.append(INGESTION_DATE)  # INGESTION_DATE
+    values = values + extract_values_header(header)
+
+    # Convert the values into a long string
+    vvv = ''
+    for v in values:
+        vvv += '\"' + v + '\", '
+    vvv = vvv.rstrip(', ')
+
+    query = _insert_row.format(**{'tablename': tablename, 'values': vvv})
+    logger.debug(f"Executing:{query}")
+    cur.execute(query)
+    logger.info(f"Ingestion Done for: {fitsfile}")
+    con.commit()
 
 
 def ingest_files(files, tablename, con=None, dbname=None):

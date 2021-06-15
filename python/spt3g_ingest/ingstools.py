@@ -70,6 +70,8 @@ def convert_to_fits(g3file, fitsfile=None, outpath='',
             hdr = extract_metadata_frame(frame, hdr)
 
         # Populate additional metadata for DB
+        hdr['PARENT'] = (os.path.basename(g3file), 'Name of parent file')
+        hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
 
         # Convert to FITS
         if frame.type == core.G3FrameType.Map:

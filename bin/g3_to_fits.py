@@ -7,7 +7,7 @@ import logging
 import time
 import subprocess
 from spt3g_ingest import ingstools
-from spt3g_ingest import sql_ingestion
+from spt3g_ingest import sqltools
 
 
 def cmdline():
@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     # Prepare DB in case we want to ingeste
     if args.ingest:
-        con = sql_ingestion.connect_db(args.dbname, args.tablename)
+        con = sqltools.connect_db(args.dbname, args.tablename)
 
     # Loop over all of the files
     t0 = time.time()
@@ -82,9 +82,6 @@ if __name__ == "__main__":
                                   overwrite=args.clobber,
                                   compress=args.compress)
 
-        if args.ingest:
-            sql_ingestion.ingest_files([fitsfile], args.tablename, con=con)
-
         if args.fpack:
             if args.clobber and os.path.isfile(fitsfile+'.fz'):
                 os.remove(fitsfile+'.fz')
@@ -94,5 +91,10 @@ if __name__ == "__main__":
             return_code = subprocess.call(cmd, shell=True)
             logger.info(f"Created: {fitsfile}.fz")
             os.remove(fitsfile)
+            # Update the name of the fitsfile
+            fitsfile = fitsfile + ".fz"
+
+        if args.ingest:
+            sqltools.ingest_fitsfile(fitsfile, args.tablename, con=con)
 
         logger.info(f"Total time: {ingstools.elapsed_time(t0)}")
