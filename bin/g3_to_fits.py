@@ -7,6 +7,7 @@ import logging
 import time
 import subprocess
 from spt3g_ingest import ingstools
+from spt3g_ingest import sql_ingestion
 
 
 def cmdline():
@@ -24,6 +25,14 @@ def cmdline():
                         help="Fpack output fits file")
     parser.add_argument("--fpack_options", action="store", default='-g2',
                         help="Fpack options")
+
+    # Ingest options
+    parser.add_argument("--ingest", action='store_true', default=False,
+                        help="Ingest files")
+    parser.add_argument("--tablename", action='store', default="file_info_v0",
+                        help="Table name with file infomation")
+    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g.db",
+                        help="Name of the sqlite3 database file")
 
     # Logging options (loglevel/log_format/log_format_date)
     default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
@@ -56,6 +65,10 @@ if __name__ == "__main__":
 
     logger = logging.getLogger(__name__)
 
+    # Prepare DB in case we want to ingeste
+    if args.ingest:
+        con = sql_ingestion.connect_db(args.dbname, args.tablename)
+
     # Loop over all of the files
     t0 = time.time()
     for g3file in args.files:
@@ -68,6 +81,9 @@ if __name__ == "__main__":
         ingstools.convert_to_fits(g3file, fitsfile,
                                   overwrite=args.clobber,
                                   compress=args.compress)
+
+        if args.ingest:
+            sql_ingestion.ingest_files([fitsfile], args.tablename, con=con)
 
         if args.fpack:
             if args.clobber and os.path.isfile(fitsfile+'.fz'):

@@ -69,6 +69,8 @@ def convert_to_fits(g3file, fitsfile=None, outpath='',
             logger.info(f"Extracting metadata from frame: {frame.type}")
             hdr = extract_metadata_frame(frame, hdr)
 
+        # Populate additional metadata for DB
+
         # Convert to FITS
         if frame.type == core.G3FrameType.Map:
             logger.info(f"Transforming to FITS: {frame.type} -- Id: {frame['Id']}")
