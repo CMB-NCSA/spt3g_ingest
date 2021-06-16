@@ -52,7 +52,7 @@ def convert_to_fits(g3file, fitsfile=None, outpath='',
 
     # Skip if fitsfile exists and overwrite not True
     if os.path.isfile(fitsfile) and not overwrite:
-        logger.warning(f"File exists, skipping: {fitsfile}")
+        logger.info(f"File exists, skipping: {fitsfile}")
         return
 
     g3 = core.G3File(g3file)

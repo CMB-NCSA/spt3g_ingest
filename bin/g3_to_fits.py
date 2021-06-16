@@ -78,26 +78,34 @@ if __name__ == "__main__":
         logger.info(f"Doing: {k}/{nfiles} files")
 
         basename = ingstools.get_g3basename(g3file)
+        # compress in an option of convert_to_fits (spt3g software)
         if args.compress:
             fitsfile = os.path.join(args.outdir, basename+".fits.gz")
         else:
             fitsfile = os.path.join(args.outdir, basename+".fits")
 
-        ingstools.convert_to_fits(g3file, fitsfile,
-                                  overwrite=args.clobber,
-                                  compress=args.compress)
-
         if args.fpack:
-            if args.clobber and os.path.isfile(fitsfile+'.fz'):
-                os.remove(fitsfile+'.fz')
-
-            cmd = f"fpack {args.fpack_options} {fitsfile}"
-            logger.info(f"running: {cmd}")
-            return_code = subprocess.call(cmd, shell=True)
-            logger.info(f"Created: {fitsfile}.fz")
-            os.remove(fitsfile)
+            if os.path.isfile(fitsfile+'.fz') and not args.clobber:
+                logger.warning(f"Skipping: {g3file} -- file exists: {fitsfile}.fz")
+            else:
+                ingstools.convert_to_fits(g3file, fitsfile,
+                                          overwrite=args.clobber,
+                                          compress=args.compress)
+                if os.path.isfile(fitsfile+'.fz'):
+                    os.remove(fitsfile+'.fz')
+                cmd = f"fpack {args.fpack_options} {fitsfile}"
+                logger.info(f"running: {cmd}")
+                t1 = time.time()
+                return_code = subprocess.call(cmd, shell=True)
+                logger.info(f"fpack time: {ingstools.elapsed_time(t1)}")
+                logger.info(f"Created: {fitsfile}.fz")
+                os.remove(fitsfile)
             # Update the name of the fitsfile
             fitsfile = fitsfile + ".fz"
+        else:
+            ingstools.convert_to_fits(g3file, fitsfile,
+                                      overwrite=args.clobber,
+                                      compress=args.compress)
 
         if args.ingest:
             sqltools.ingest_fitsfile(fitsfile, args.tablename, con=con)
