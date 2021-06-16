@@ -71,7 +71,12 @@ if __name__ == "__main__":
 
     # Loop over all of the files
     t0 = time.time()
+    k = 1
+    nfiles = len(args.files)
     for g3file in args.files:
+
+        logger.info(f"Doing: {k}/{nfiles} files")
+
         basename = ingstools.get_g3basename(g3file)
         if args.compress:
             fitsfile = os.path.join(args.outdir, basename+".fits.gz")
@@ -98,3 +103,4 @@ if __name__ == "__main__":
             sqltools.ingest_fitsfile(fitsfile, args.tablename, con=con)
 
         logger.info(f"Total time: {ingstools.elapsed_time(t0)}")
+        k += 1

@@ -48,6 +48,10 @@ if __name__ == "__main__":
 
     # Loop over all of the files
     t0 = time.time()
+    nfiles = len(args.files)
+    k = 1
     for fitsfile in args.files:
+        logger.info(f"Doing: {k}/{nfiles} files")
         sqltools.ingest_fitsfile(fitsfile, args.tablename, con=con)
         logger.info(f"Total time: {ingstools.elapsed_time(t0)}")
+        k += 1
