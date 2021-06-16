@@ -94,7 +94,7 @@ def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None):
     # Get cursor
     cur = con.cursor()
 
-    logger.info(f"Ingesting {fitsfile} to: {tablename}")
+    logger.info(f"Ingesting: {fitsfile} to: {tablename}")
 
     # Read in the header
     header = read_header(fitsfile)

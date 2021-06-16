@@ -7,6 +7,7 @@ import time
 import logging
 from logging.handlers import RotatingFileHandler
 from astropy.time import Time
+import subprocess
 
 LOGGER = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ def convert_to_fits(g3file, fitsfile=None, outpath='',
 
     # Skip if fitsfile exists and overwrite not True
     if os.path.isfile(fitsfile) and not overwrite:
-        logger.info(f"File exists, skipping: {fitsfile}")
+        logger.warning(f"File exists, skipping: {fitsfile}")
         return
 
     g3 = core.G3File(g3file)
@@ -80,9 +81,27 @@ def convert_to_fits(g3file, fitsfile=None, outpath='',
             maps.fitsio.save_skymap_fits(fitsfile, frame['T'], overwrite=overwrite,
                                          compress=compress, hdr=hdr)
             logger.info(f"Created: {fitsfile}")
-            logger.info(f"Creation time: {elapsed_time(t0)}")
+            logger.info(f"FITS creation time: {elapsed_time(t0)}")
 
     return
+
+
+def run_fpack(fitsfile, fpack_options='', logger=None):
+    "fpack a fitsfile"
+
+    if not logger:
+        logger = LOGGER
+    # Remove fz file if exists
+    if os.path.isfile(fitsfile+'.fz'):
+        os.remove(fitsfile+'.fz')
+    cmd = f"fpack {fpack_options} {fitsfile}"
+    logger.info(f"running: {cmd}")
+    t0 = time.time()
+    return_code = subprocess.call(cmd, shell=True)
+    logger.info(f"fpack time: {elapsed_time(t0)}")
+    logger.info(f"Created: {fitsfile}.fz")
+    os.remove(fitsfile)
+    return return_code
 
 
 def get_g3basename(g3file):

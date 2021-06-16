@@ -91,16 +91,8 @@ if __name__ == "__main__":
                 ingstools.convert_to_fits(g3file, fitsfile,
                                           overwrite=args.clobber,
                                           compress=args.compress)
-                if os.path.isfile(fitsfile+'.fz'):
-                    os.remove(fitsfile+'.fz')
-                cmd = f"fpack {args.fpack_options} {fitsfile}"
-                logger.info(f"running: {cmd}")
-                t1 = time.time()
-                return_code = subprocess.call(cmd, shell=True)
-                logger.info(f"fpack time: {ingstools.elapsed_time(t1)}")
-                logger.info(f"Created: {fitsfile}.fz")
-                os.remove(fitsfile)
-            # Update the name of the fitsfile
+                ingstools.run_fpack(fitsfile, fpack_options=args.fpack_options)
+
             fitsfile = fitsfile + ".fz"
         else:
             ingstools.convert_to_fits(g3file, fitsfile,
