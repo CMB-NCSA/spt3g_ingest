@@ -28,15 +28,22 @@ def extract_metadata_frame(frame, metadata=None, logger=None):
     # Loop over all items and select only the ones in the Mapping
     if not metadata:
         metadata = {}
+
+    # Populate all values with None
+    for k in _keywords_map.keys():
+        keyword = _keywords_map[k][0]
+        metadata[keyword] = (None, _keywords_map[k][1])
+
     for k in iter(frame):
         if k in _keywords_map.keys():
             keyword = _keywords_map[k][0]
-            # Need to re-cast GETime objects
+            # Need to re-cast G3Time objects
             if type(frame[k]) == core.G3Time:
                 gtime = Time(frame[k].isoformat(), format='isot', scale='utc').isot
                 metadata[keyword] = (gtime, _keywords_map[k][1])
             else:
                 metadata[keyword] = (frame[k], _keywords_map[k][1])
+
     return metadata
 
 
