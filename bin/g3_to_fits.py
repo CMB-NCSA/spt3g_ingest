@@ -5,7 +5,6 @@ import os
 import sys
 import logging
 import time
-import subprocess
 from spt3g_ingest import ingstools
 from spt3g_ingest import sqltools
 
