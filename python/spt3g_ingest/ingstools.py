@@ -81,6 +81,14 @@ def convert_to_fits(g3file, fitsfile=None, outpath='',
         hdr['PARENT'] = (os.path.basename(g3file), 'Name of parent file')
         hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
 
+        # Make sure OBS-ID is populated for yearly maps
+        if not hdr['OBS-ID'][0] and hdr['FITSNAME'][0].split("_")[0] == 'yearly':
+            f = hdr['FITSNAME'][0].split("_")
+            # from basename get for example: 'yearly_winter_2020'
+            OBSID = ("_".join([f[0], f[2], f[3]]), hdr['OBS-ID'][1])
+            hdr['OBS-ID'] = OBSID
+            logger.info(f"Inserting OBS-ID to header: {hdr['OBS-ID']}")
+
         # Convert to FITS
         if frame.type == core.G3FrameType.Map:
             logger.info(f"Transforming to FITS: {frame.type} -- Id: {frame['Id']}")

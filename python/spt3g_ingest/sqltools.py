@@ -19,7 +19,7 @@ _table_statement = _table_statement.rstrip(',\n')
 
 # Template to insert a row
 _insert_row = """
-INSERT INTO {tablename} values ({values})
+INSERT{or_replace}INTO {tablename} values ({values})
 """
 
 
@@ -85,7 +85,7 @@ def connect_db(dbname, tablename='FILE_INFO_V0'):
     return con
 
 
-def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None):
+def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None, replace=False):
     """ Ingest file into an sqlite3 table"""
 
     # Make new connection if not available
@@ -93,6 +93,11 @@ def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None):
         con = sqlite3.connect(dbname)
     # Get cursor
     cur = con.cursor()
+
+    if replace:
+        or_replace = ' OR REPLACE '
+    else:
+        or_replace = ' '
 
     logger.info(f"Ingesting: {fitsfile} to: {tablename}")
 
@@ -122,7 +127,9 @@ def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None):
         vvv += '\"' + v + '\", '
     vvv = vvv.rstrip(', ')
 
-    query = _insert_row.format(**{'tablename': tablename, 'values': vvv})
+    query = _insert_row.format(**{'or_replace': or_replace,
+                                  'tablename': tablename, 'values': vvv})
+
     logger.debug(f"Executing:{query}")
     try:
         cur.execute(query)
