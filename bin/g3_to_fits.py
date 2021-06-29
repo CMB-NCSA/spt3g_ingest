@@ -7,6 +7,7 @@ import logging
 import time
 from spt3g_ingest import ingstools
 from spt3g_ingest import sqltools
+import multiprocessing as mp
 
 
 def cmdline():
@@ -46,6 +47,10 @@ def cmdline():
     parser.add_argument("--log_format_date", action="store", type=str, default=default_log_format_date,
                         help="Format for date section of logging")
 
+    # Use multiprocessing
+    parser.add_argument("--np", action="store", default=1, type=int,
+                        help="Run using multi-process, 0=automatic, 1=single-process [default]")
+
     args = parser.parse_args()
 
     # Make sure we do --compress or --fpack
@@ -53,6 +58,52 @@ def cmdline():
         sys.exit("ERROR: cannot use both --compress and -fpack")
 
     return args
+
+
+def run_g3file(g3file, k, args):
+
+    """
+    Function that contains all the run steps to be able to call
+    using multiprocessing
+    """
+
+    # Let's time this
+    t0 = time.time()
+    nfiles = len(args.files)
+
+    # Get logger
+    logger = logging.getLogger(__name__)
+    logger.info(f"Doing: {k}/{nfiles} files")
+
+    basename = ingstools.get_g3basename(g3file)
+    # compress in an option of convert_to_fits (spt3g software)
+    if args.compress:
+        fitsfile = os.path.join(args.outdir, basename+".fits.gz")
+    else:
+        fitsfile = os.path.join(args.outdir, basename+".fits")
+
+    if args.fpack:
+        if os.path.isfile(fitsfile+'.fz') and not args.clobber:
+            logger.warning(f"Skipping: {g3file} -- file exists: {fitsfile}.fz")
+        else:
+            ingstools.convert_to_fits(g3file, fitsfile,
+                                      overwrite=args.clobber,
+                                      compress=args.compress)
+            ingstools.run_fpack(fitsfile, fpack_options=args.fpack_options)
+
+        fitsfile = fitsfile + ".fz"
+    else:
+        ingstools.convert_to_fits(g3file, fitsfile,
+                                  overwrite=args.clobber,
+                                  compress=args.compress)
+
+    if args.ingest:
+        con = sqltools.connect_db(args.dbname, args.tablename)
+        sqltools.ingest_fitsfile(fitsfile, args.tablename, con=con, replace=args.replace)
+        con.close()
+
+    logger.info(f"Completed: {k}/{nfiles} files")
+    logger.info(f"Total time: {ingstools.elapsed_time(t0)} for: {g3file}")
 
 
 if __name__ == "__main__":
@@ -66,42 +117,28 @@ if __name__ == "__main__":
 
     logger = logging.getLogger(__name__)
 
-    # Prepare DB in case we want to ingeste
-    if args.ingest:
-        con = sqltools.connect_db(args.dbname, args.tablename)
+    # Get the number of processors to use
+    NP = ingstools.get_NP(args.np)
+
+    if NP > 1:
+        p = mp.Pool(processes=NP)
+    logger.info(f"Will use {NP} processors to convert and ingest")
 
     # Loop over all of the files
-    t0 = time.time()
     k = 1
-    nfiles = len(args.files)
+    t0 = time.time()
     for g3file in args.files:
-
-        logger.info(f"Doing: {k}/{nfiles} files")
-
-        basename = ingstools.get_g3basename(g3file)
-        # compress in an option of convert_to_fits (spt3g software)
-        if args.compress:
-            fitsfile = os.path.join(args.outdir, basename+".fits.gz")
+        if NP > 1:
+            kw = {}
+            args.k = k
+            fargs = (g3file, k, args)
+            p.apply_async(run_g3file, fargs, kw)
         else:
-            fitsfile = os.path.join(args.outdir, basename+".fits")
-
-        if args.fpack:
-            if os.path.isfile(fitsfile+'.fz') and not args.clobber:
-                logger.warning(f"Skipping: {g3file} -- file exists: {fitsfile}.fz")
-            else:
-                ingstools.convert_to_fits(g3file, fitsfile,
-                                          overwrite=args.clobber,
-                                          compress=args.compress)
-                ingstools.run_fpack(fitsfile, fpack_options=args.fpack_options)
-
-            fitsfile = fitsfile + ".fz"
-        else:
-            ingstools.convert_to_fits(g3file, fitsfile,
-                                      overwrite=args.clobber,
-                                      compress=args.compress)
-
-        if args.ingest:
-            sqltools.ingest_fitsfile(fitsfile, args.tablename, con=con, replace=args.replace)
-
-        logger.info(f"Total time: {ingstools.elapsed_time(t0)}")
+            run_g3file(g3file, k, args)
         k += 1
+
+    if NP > 1:
+        p.close()
+        p.join()
+
+    logger.info(f"Grand Total time: {ingstools.elapsed_time(t0)}")
