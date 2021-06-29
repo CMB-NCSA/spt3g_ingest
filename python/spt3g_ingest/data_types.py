@@ -6,9 +6,9 @@ Fd = OrderedDict()
 # From file info not in header
 # INGESTION_ID is unique per table
 Fd['ID'] = 'TEXT'
-Fd['INGESTION_DATE'] = 'TEXT'
 Fd['FILENAME'] = 'TEXT'
 Fd['FILEPATH'] = 'TEXT'
+Fd['INGESTION_DATE'] = 'TEXT'
 
 # From header
 Fd['NAXIS1'] = 'INT'

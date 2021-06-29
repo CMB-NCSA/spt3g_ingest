@@ -13,6 +13,8 @@ def cmdline():
     parser.add_argument("files", nargs='+',
                         help="Filename(s) to ingest")
     # Ingest options
+    parser.add_argument("--replace", action='store_true', default=False,
+                        help="Replace ingest entry")
     parser.add_argument("--tablename", action='store', default="file_info_v0",
                         help="Table name with file infomation")
     parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g.db",
@@ -52,6 +54,6 @@ if __name__ == "__main__":
     k = 1
     for fitsfile in args.files:
         logger.info(f"Doing: {k}/{nfiles} files")
-        sqltools.ingest_fitsfile(fitsfile, args.tablename, con=con)
+        sqltools.ingest_fitsfile(fitsfile, args.tablename, con=con, replace=args.replace)
         logger.info(f"Total time: {ingstools.elapsed_time(t0)}")
         k += 1
