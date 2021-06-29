@@ -8,6 +8,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from astropy.time import Time
 import subprocess
+import multiprocessing
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,6 +21,20 @@ _keywords_map = {'ObservationStart': ('DATE-BEG', 'Observation start date'),
                  }
 
 
+def pre_populate_metadata(metadata=None):
+    """ Pre-populate metadata dict with None if not defined"""
+
+    if not metadata:
+        metadata = {}
+
+    # Populate all values with None if not present
+    for k in _keywords_map.keys():
+        keyword = _keywords_map[k][0]
+        if keyword not in metadata:
+            metadata[keyword] = (None, _keywords_map[k][1])
+    return metadata
+
+
 def extract_metadata_frame(frame, metadata=None, logger=None):
     """
     Extract selected metadata from a g3 frame
@@ -28,11 +43,6 @@ def extract_metadata_frame(frame, metadata=None, logger=None):
     # Loop over all items and select only the ones in the Mapping
     if not metadata:
         metadata = {}
-
-    # Populate all values with None
-    for k in _keywords_map.keys():
-        keyword = _keywords_map[k][0]
-        metadata[keyword] = (None, _keywords_map[k][1])
 
     for k in iter(frame):
         if k in _keywords_map.keys():
@@ -66,9 +76,14 @@ def convert_to_fits(g3file, fitsfile=None, outpath='',
     g3 = core.G3File(g3file)
     logger.info(f"Loading: {g3file}")
 
+    # Pre-populate extra metadata that we will need
+    hdr = pre_populate_metadata()
+    # Populate additional metadata for DB
+    hdr['PARENT'] = (os.path.basename(g3file), 'Name of parent file')
+    hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
+
     # Loop over to extract metadata, we can only loop once over the g3 object,
     # and this loop relies on Map being the last frame of the g3 object
-    hdr = {}
     t0 = time.time()
     for frame in g3:
 
@@ -76,10 +91,6 @@ def convert_to_fits(g3file, fitsfile=None, outpath='',
         if frame.type == core.G3FrameType.Observation or frame.type == core.G3FrameType.Map:
             logger.info(f"Extracting metadata from frame: {frame.type}")
             hdr = extract_metadata_frame(frame, hdr)
-
-        # Populate additional metadata for DB
-        hdr['PARENT'] = (os.path.basename(g3file), 'Name of parent file')
-        hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
 
         # Convert to FITS
         if frame.type == core.G3FrameType.Map:
@@ -198,3 +209,19 @@ def elapsed_time(t1, verb=False):
     if verb:
         print("Elapsed time: {}".format(stime))
     return stime
+
+
+def get_NP(MP):
+
+    """ Get the number of processors in the machine
+    if MP == 0, use all available processor
+    """
+    # For it to be a integer
+    MP = int(MP)
+    if MP == 0:
+        NP = multiprocessing.cpu_count()
+    elif isinstance(MP, int):
+        NP = MP
+    else:
+        raise ValueError('MP is wrong type: %s, integer type' % MP)
+    return NP
