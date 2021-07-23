@@ -15,7 +15,7 @@ def cmdline():
     # Ingest options
     parser.add_argument("--replace", action='store_true', default=False,
                         help="Replace ingest entry")
-    parser.add_argument("--tablename", action='store', default="file_info_v0",
+    parser.add_argument("--tablename", action='store', default="file_info_v1",
                         help="Table name with file infomation")
     parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g.db",
                         help="Name of the sqlite3 database file")

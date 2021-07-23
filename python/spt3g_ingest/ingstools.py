@@ -57,54 +57,94 @@ def extract_metadata_frame(frame, metadata=None, logger=None):
     return metadata
 
 
-def convert_to_fits(g3file, fitsfile=None, outpath='',
-                    overwrite=True, compress=False, logger=None):
+def get_metadata(g3file, logger=None):
+
+    """
+    Extract metadata from g3file and store in header dictionary
+    """
 
     if not logger:
         logger = LOGGER
 
+    # Pre-populate extra metadata that we will need
+    hdr = pre_populate_metadata()
+    hdr['PARENT'] = (os.path.basename(g3file), 'Name of parent file')
+    g3 = core.G3File(g3file)
+    logger.info(f"Loading: {g3file}")
+    for frame in g3:
+        # Extract metadata
+        if frame.type == core.G3FrameType.Observation or frame.type == core.G3FrameType.Map:
+            logger.info(f"Extracting metadata from frame: {frame.type}")
+            hdr = extract_metadata_frame(frame, hdr)
+
+        if frame.type == core.G3FrameType.Map:
+            logger.info(f"Transforming to FITS: {frame.type} -- Id: {frame['Id']}")
+            # maps.RemoveWeights(frame, zero_nans=True)
+            # Make sure OBS-ID is populated for yearly maps
+            if hdr['OBS-ID'][0] is None and hdr['PARENT'][0].split("_")[0] == 'yearly':
+                f = hdr['PARENT'][0].split("_")
+                # from basename get for example: 'yearly_winter_2020'
+                OBSID = ("_".join([f[0], f[2], f[3]]), hdr['OBS-ID'][1])
+                hdr['OBS-ID'] = OBSID
+                hdr['DATE-BEG'] = OBSID
+                logger.info(f"Inserting OBS-ID to header: {hdr['OBS-ID']}")
+                logger.info(f"Inserting DATE-BEG to header: {hdr['DATE-BEG']}")
+
+    return hdr
+
+
+def get_folder_date(hdr):
+
+    """
+    Extract the folder name based on the observation date
+    """
+
+    try:
+        folder_date = Time(hdr['DATE-BEG'][0]).strftime("%Y-%m")
+    except ValueError:
+        folder_date = hdr['DATE-BEG'][0]
+    return folder_date
+
+
+def convert_to_fits(g3file, fitsfile=None, outpath='', hdr=None,
+                    overwrite=True, compress=False, logger=None):
+
+    t0 = time.time()
+    if not logger:
+        logger = LOGGER
+
+    # Extract the relevante metadata
+    if not hdr:
+        hdr = get_metadata(g3file, logger=logger)
+
     # Define fitsfile name only if undefined
     if fitsfile is None:
         basename = get_g3basename(g3file)
-        fitsfile = os.path.join(outpath, f"{basename}.fits")
+        fitsfile = os.path.join(outpath, get_folder_date(hdr), f"{basename}.fits")
 
     # Skip if fitsfile exists and overwrite not True
     if os.path.isfile(fitsfile) and not overwrite:
         logger.warning(f"File exists, skipping: {fitsfile}")
         return
 
-    g3 = core.G3File(g3file)
-    logger.info(f"Loading: {g3file}")
-
-    # Pre-populate extra metadata that we will need
-    hdr = pre_populate_metadata()
     # Populate additional metadata for DB
-    hdr['PARENT'] = (os.path.basename(g3file), 'Name of parent file')
     hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
 
-    # Loop over to extract metadata, we can only loop once over the g3 object,
-    # and this loop relies on Map being the last frame of the g3 object
-    t0 = time.time()
+    # Second loop to write FITS
+    g3 = core.G3File(g3file)
+    logger.info(f"Loading 2: {g3file}")
     for frame in g3:
-
-        # Extract metadata
-        if frame.type == core.G3FrameType.Observation or frame.type == core.G3FrameType.Map:
-            logger.info(f"Extracting metadata from frame: {frame.type}")
-            hdr = extract_metadata_frame(frame, hdr)
-
         # Convert to FITS
         if frame.type == core.G3FrameType.Map:
             logger.info(f"Transforming to FITS: {frame.type} -- Id: {frame['Id']}")
             maps.RemoveWeights(frame, zero_nans=True)
-            # Make sure OBS-ID is populated for yearly maps
-            if hdr['OBS-ID'][0] is None and hdr['FITSNAME'][0].split("_")[0] == 'yearly':
-                f = hdr['FITSNAME'][0].split("_")
-                # from basename get for example: 'yearly_winter_2020'
-                OBSID = ("_".join([f[0], f[2], f[3]]), hdr['OBS-ID'][1])
-                hdr['OBS-ID'] = OBSID
-                logger.info(f"Inserting OBS-ID to header: {hdr['OBS-ID']}")
-            maps.fitsio.save_skymap_fits(fitsfile, frame['T'], overwrite=overwrite,
-                                         compress=compress, hdr=hdr)
+            # Make sure that the folder exists:
+            dirname = os.path.dirname(fitsfile)
+            if not os.path.isdir(dirname):
+                logger.info(f"Creating directory {os.path.dirname(fitsfile)}")
+                os.mkdir(dirname)
+            maps.fitsio.save_skymap_fits(fitsfile, frame['T'], overwrite=overwrite, compress=compress,
+                                         W=frame['Wunpol'], hdr=hdr)
             logger.info(f"Created: {fitsfile}")
             logger.info(f"FITS creation time: {elapsed_time(t0)}")
 

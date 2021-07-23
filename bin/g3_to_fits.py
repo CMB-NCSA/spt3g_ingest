@@ -31,7 +31,7 @@ def cmdline():
                         help="Ingest files")
     parser.add_argument("--replace", action='store_true', default=False,
                         help="Replace ingest entry")
-    parser.add_argument("--tablename", action='store', default="file_info_v0",
+    parser.add_argument("--tablename", action='store', default="file_info_v1",
                         help="Table name with file infomation")
     parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g.db",
                         help="Name of the sqlite3 database file")
@@ -76,17 +76,22 @@ def run_g3file(g3file, k, args):
     logger.info(f"Doing: {k}/{nfiles} files")
 
     basename = ingstools.get_g3basename(g3file)
+
+    # Get metadata from g3file
+    hdr = ingstools.get_metadata(g3file, logger=logger)
+    folder_date = ingstools.get_folder_date(hdr)
     # compress in an option of convert_to_fits (spt3g software)
     if args.compress:
-        fitsfile = os.path.join(args.outdir, basename+".fits.gz")
+        fitsfile = os.path.join(args.outdir, folder_date, basename+".fits.gz")
     else:
-        fitsfile = os.path.join(args.outdir, basename+".fits")
+        fitsfile = os.path.join(args.outdir, folder_date, basename+".fits")
 
     if args.fpack:
         if os.path.isfile(fitsfile+'.fz') and not args.clobber:
             logger.warning(f"Skipping: {g3file} -- file exists: {fitsfile}.fz")
         else:
             ingstools.convert_to_fits(g3file, fitsfile,
+                                      hdr=hdr,
                                       overwrite=args.clobber,
                                       compress=args.compress)
             ingstools.run_fpack(fitsfile, fpack_options=args.fpack_options)
