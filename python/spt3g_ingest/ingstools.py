@@ -106,8 +106,8 @@ def get_folder_date(hdr):
     return folder_date
 
 
-def convert_to_fits(g3file, fitsfile=None, outpath='', hdr=None,
-                    overwrite=True, compress=False, logger=None):
+def convert_to_fits_raw(g3file, fitsfile=None, outpath='', hdr=None,
+                        overwrite=True, compress=False, logger=None):
 
     t0 = time.time()
     if not logger:

@@ -350,32 +350,25 @@ if __name__ == "__main__":
     nfiles = len(args.files)
 
     if NP > 1:
+        p = mp.Pool(processes=NP, maxtasksperchild=1)
         logger.info(f"Will use {NP} processors to convert and ingest")
 
     # Loop over all of the files
-    jobs = []
     k = 1
+    t0 = time.time()
     for g3file in args.files:
         if NP > 1:
             kw = {}
             args.k = k
             fargs = (g3file, k, args)
-            logger.info(f"Starting mp.Process for {g3file}")
-            p = mp.Process(target=run_g3file, args=fargs)
-            jobs.append(p)
+            logger.info(f"apply_async for {g3file}")
+            p.apply_async(run_g3file, fargs, kw)
         else:
             run_g3file(g3file, k, args)
         k += 1
 
     if NP > 1:
-
-        # Loop over the process in chunks of size NP
-        for job_chunk in chunker(jobs, NP):
-            for job in job_chunk:
-                logger.info(f"starting job: {job.name}")
-                job.start()
-            for job in job_chunk:
-                logger.info(f"joining job: {job.name}")
-                job.join()
+        p.close()
+        p.join()
 
     logger.info(f"Grand Total time: {ingstools.elapsed_time(t0)}")
