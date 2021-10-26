@@ -11,6 +11,7 @@ import subprocess
 import multiprocessing as mp
 import types
 import copy
+import shutil
 from spt3g_ingest import sqltools
 
 LOGGER = logging.getLogger(__name__)
@@ -593,3 +594,22 @@ def get_NP(MP):
 def chunker(seq, size):
     "Chunk a sequence in chunks of a given size"
     return (seq[pos:pos + size] for pos in range(0, len(seq), size))
+
+
+def relocate_g3file(g3file, outdir, dryrun=False):
+
+    # Get the metadata for folder information
+    hdr = get_metadata(g3file)
+    folder_date = get_folder_date(hdr)
+    dirname = os.path.join(outdir, folder_date)
+
+    if dryrun:
+        LOGGER.info(f"DRYRUN: mv {g3file} {dirname}")
+        return
+
+    if not os.path.isdir(dirname):
+        LOGGER.info(f"Creating directory {dirname}")
+        os.mkdir(dirname)
+    LOGGER.info(f"Moving {g3file} --> {dirname}")
+    shutil.move(g3file, dirname)
+    return
