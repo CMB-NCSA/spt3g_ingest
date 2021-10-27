@@ -265,7 +265,6 @@ class g3worker():
 
         # Skip if fitsfile exists and overwrite/clobber not True
         if self.skip_fitsfile(fitsfile):
-            self.logger.warning(f"File exists, skipping: {fitsfile}")
             return
 
         # Make a copy of the header to modify
@@ -415,9 +414,10 @@ class g3worker():
             # Make sure we don't have a zombie file of zero size
             if os.path.getsize(fitsfile) > size:
                 skip = True
+                self.logger.warning(f"File exists, skipping: {fitsfile}")
             else:
                 self.logger.warning(f"Found zombie file: {fitsfile}, will remove it")
-                os.path.remove(fitsfile)
+                os.remove(fitsfile)
                 skip = False
         else:
             skip = False
