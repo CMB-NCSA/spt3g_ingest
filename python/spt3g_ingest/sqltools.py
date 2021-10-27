@@ -85,12 +85,36 @@ def connect_db(dbname, tablename='FILE_INFO_V0'):
     return con
 
 
+def check_dbtable(dbname, tablename):
+    """ Check tablename exists in database"""
+    logger.info(f"Checking {tablename} exits in: {dbname}")
+    # Connect to DB
+    con = sqlite3.connect(dbname)
+    # Create the table
+    create_table = """
+    CREATE TABLE IF NOT EXISTS {tablename} (
+    {statement}
+    )
+    """.format(**{'tablename': tablename, 'statement': _table_statement})
+    logger.debug(create_table)
+
+    cur = con.cursor()
+    cur.execute(create_table)
+    con.commit()
+    con.close()
+    return
+
+
 def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None, replace=False):
     """ Ingest file into an sqlite3 table"""
 
     # Make new connection if not available
     if not con:
+        close_con = True
         con = sqlite3.connect(dbname)
+    else:
+        close_con = False
+
     # Get cursor
     cur = con.cursor()
 
@@ -137,3 +161,6 @@ def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None, replace=False):
         logger.info(f"Ingestion Done for: {fitsfile}")
     except sqlite3.IntegrityError:
         logger.warning(f"NOT UNIQUE: ingestion failed for {fitsfile}")
+
+    if close_con:
+        con.close()

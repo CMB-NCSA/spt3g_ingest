@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+
+import argparse
+import sys
+import logging
+import time
+from spt3g_ingest import ingstools
+
+
+def cmdline():
+
+    parser = argparse.ArgumentParser(description="spt3g ingestion tool")
+    parser.add_argument("files", nargs='+',
+                        help="Filename(s) to ingest")
+    parser.add_argument("--outdir", type=str, action='store', default=None,
+                        required=True, help="Location for output files")
+    parser.add_argument("--clobber", action='store_true', default=False,
+                        help="Clobber output files")
+    parser.add_argument("--compress", action='store_true', default=False,
+                        help="Compress (gzip) output files")
+    parser.add_argument("--fpack", action='store_true', default=False,
+                        help="Fpack output fits file")
+    parser.add_argument("--fpack_options", action="store", default='-g2',
+                        help="Fpack options")
+
+    # Filter options
+    parser.add_argument("--filter_transient", action='store_true', default=False,
+                        help="Filter daily maps for transients")
+    parser.add_argument("--mask", action="store", default=None,
+                        help="Input mask for filter transients")
+    parser.add_argument("--coadd", nargs="*", default=None,
+                        help="Name of the coadd filenames (g3)")
+    parser.add_argument("--band", nargs="*", default=['90GHz', '150GHz', '220GHz'],
+                        help="The bands to select from: 90GHz, 150GHz and 220GHz")
+    parser.add_argument("--polarized", action="store_true", default=False,
+                        help="Filter polarized maps.")
+
+    # Ingest options
+    parser.add_argument("--ingest", action='store_true', default=False,
+                        help="Ingest files")
+    parser.add_argument("--replace", action='store_true', default=False,
+                        help="Replace ingest entry")
+    parser.add_argument("--tablename", action='store', default="file_info_v1",
+                        help="Table name with file infomation")
+    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g.db",
+                        help="Name of the sqlite3 database file")
+
+    # Logging options (loglevel/log_format/log_format_date)
+    default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
+    default_log_format_date = '%Y-%m-%d %H:%M:%S'
+    parser.add_argument("--loglevel", action="store", default='INFO', type=str.upper,
+                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                        help="Logging Level [DEBUG/INFO/WARNING/ERROR/CRITICAL]")
+    parser.add_argument("--log_format", action="store", type=str, default=default_log_format,
+                        help="Format for logging")
+    parser.add_argument("--log_format_date", action="store", type=str, default=default_log_format_date,
+                        help="Format for date section of logging")
+
+    # Use multiprocessing
+    parser.add_argument("--np", action="store", default=1, type=int,
+                        help="Run using multi-process, 0=automatic, 1=single-process [default]")
+
+    args = parser.parse_args()
+
+    # Make sure we do --compress or --fpack
+    if args.compress and args.fpack:
+        sys.exit("ERROR: cannot use both --compress and -fpack")
+
+    # Some checks in case we want to filter for transients
+    if args.filter_transient:
+        # Check for mask
+        if not args.mask:
+            raise RuntimeError("Missing mask file")
+        # Check that coadds has same number as bands
+        if len(args.coadd) != len(args.band):
+            raise RuntimeError("Missing coadd (g3) files")
+
+    return args
+
+
+if __name__ == "__main__":
+
+    # Keep time
+    t0 = time.time()
+
+    # Get the command-line arguments
+    args = cmdline()
+    g3w = ingstools.g3worker(**args.__dict__)
+    g3w.run_files()
+    logger = logging.getLogger(__name__)
+    logger.info(f"Grand Total time: {ingstools.elapsed_time(t0)}")
