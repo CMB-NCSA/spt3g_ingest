@@ -194,7 +194,7 @@ class g3worker():
         self.Ncoadds = len(self.config.coadd)
 
         # Prepare for MP, use mp.Manage to hold outputs
-        if self.NP >= self.Ncoadds:
+        if self.NP >= self.Ncoadds and self.NP > 1:
             p = {}
             manager = mp.Manager()
             return_dict = manager.dict()
@@ -203,7 +203,7 @@ class g3worker():
 
         # Loop over all coadd files
         for filename in self.config.coadd:
-            if self.NP >= self.Ncoadds:
+            if self.NP >= self.Ncoadds and self.NP > 1:
                 ar = (filename, return_dict)
                 p[filename] = mp.Process(target=self.load_single_coadd, args=ar)
                 self.logger.info(f"Starting job: {p[filename].name}")
@@ -213,7 +213,7 @@ class g3worker():
                 self.g3coadds.update(res)
 
         # Make sure all process are closed before proceeding
-        if self.NP >= self.Ncoadds:
+        if self.NP >= self.Ncoadds and self.NP > 1:
             for filename in p.keys():
                 self.logger.info(f"joining job: {p[filename].name}")
                 p[filename].join()
@@ -265,7 +265,6 @@ class g3worker():
 
         # Skip if fitsfile exists and overwrite/clobber not True
         if self.skip_fitsfile(fitsfile):
-            self.logger.warning(f"File exists, skipping: {fitsfile}")
             return
 
         # Make a copy of the header to modify
@@ -401,12 +400,25 @@ class g3worker():
         os.remove(fitsfile)
         return return_code
 
-    def skip_fitsfile(self, fitsfile):
-        "Check if fitsfile should be skipped"
+    def skip_fitsfile(self, fitsfile, size=10):
+        """
+        Check if fitsfile should be skipped, checking if the file exists
+        and that is greater than [size] (in MB)
+        """
+
+        # Get the size fron MB to Bytes
+        size = size*1024**2
         if self.config.fpack:
             fitsfile = fitsfile + ".fz"
         if os.path.isfile(fitsfile) and not self.config.clobber:
-            skip = True
+            # Make sure we don't have a zombie file of zero size
+            if os.path.getsize(fitsfile) > size:
+                skip = True
+                self.logger.warning(f"File exists, skipping: {fitsfile}")
+            else:
+                self.logger.warning(f"Found zombie file: {fitsfile}, will remove it")
+                os.remove(fitsfile)
+                skip = False
         else:
             skip = False
         return skip
