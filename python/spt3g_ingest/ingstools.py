@@ -12,6 +12,8 @@ import multiprocessing as mp
 import types
 import copy
 import shutil
+import magic
+import spt3g_ingest
 from spt3g_ingest import sqltools
 
 LOGGER = logging.getLogger(__name__)
@@ -41,6 +43,9 @@ class g3worker():
         # Prepare vars
         self.prepare()
 
+        # Check input files vs file list
+        self.check_input_files()
+
         # Load mask for transients
         if self.config.mask:
             self.load_mask()
@@ -49,6 +54,21 @@ class g3worker():
         if self.config.coadd is not None:
             self.load_coadds()
             self.logger.info(f"Coadd keys:{self.g3coadds.keys()}")
+
+    def check_input_files(self):
+        " Check if the inputs are a list or a file with a list"
+
+        t = magic.Magic(mime=True)
+        if self.nfiles == 1 and t.from_file(self.config.files[0]) == 'text/plain':
+            self.logger.info(f"{self.config.files[0]} is a list of files")
+            # Now read them in
+            with open(self.config.files[0], 'r') as f:
+                lines = f.read().splitlines()
+            self.logger.info(f"Read: {len(lines)} input files")
+            self.config.files = lines
+            self.nfiles = len(lines)
+        else:
+            self.logger.info("Nothing to see here")
 
     def run_files(self):
         " Run all g3files"
@@ -86,7 +106,7 @@ class g3worker():
             k += 1
 
     def run_async(self):
-        # *** DO NOT USE THIS ONE, it has memory  issues with sp3g pipe
+        # *** DO NOT USE THIS ONE, it has memory issues with spt3g pipe()
         " Run g3files using multiprocessing.apply_async"
 
         with mp.get_context('spawn').Pool() as p:
@@ -161,6 +181,7 @@ class g3worker():
                       log_format_date=self.config.log_format_date)
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Logging Started at level:{self.config.loglevel}")
+        self.logger.info(f"Running spt3g_ingest version: {spt3g_ingest.__version__}")
 
     def load_mask(self):
         """Load the mask for filter_transient routines"""
