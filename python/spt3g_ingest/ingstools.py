@@ -13,6 +13,7 @@ import types
 import copy
 import shutil
 import magic
+import errno
 import spt3g_ingest
 from spt3g_ingest import sqltools
 
@@ -285,7 +286,10 @@ class g3worker():
             fitsfile = self.get_fitsname(g3file, '_raw')
 
         # Skip if fitsfile exists and overwrite/clobber not True
+        # Note that if skip is False we proceed, and therefore will overwrite
+        # the fitsfile. That why we set overwrite=True in save_skymap_fits()
         if self.skip_fitsfile(fitsfile):
+            self.logger.warning(f"File exists, skipping: {fitsfile}")
             return
 
         # Make a copy of the header to modify
@@ -302,12 +306,9 @@ class g3worker():
                 self.logger.info(f"Transforming to FITS: {frame.type} -- Id: {frame['Id']}")
                 maps.RemoveWeights(frame, zero_nans=True)
                 # Make sure that the folder exists:
-                dirname = os.path.dirname(fitsfile)
-                if not os.path.isdir(dirname):
-                    self.logger.info(f"Creating directory {os.path.dirname(fitsfile)}")
-                    os.mkdir(dirname)
+                create_dir(os.path.dirname(fitsfile))
                 maps.fitsio.save_skymap_fits(fitsfile, frame['T'],
-                                             overwrite=self.config.clobber,
+                                             overwrite=True,
                                              compress=self.config.compress,
                                              W=frame['Wunpol'],
                                              hdr=hdr)
@@ -330,6 +331,7 @@ class g3worker():
         return
 
     def g3_to_fits_filtd(self, g3file, fitsfile=None):
+        """Filter a g3file and write result as fits"""
 
         t0 = time.time()
         # Pre-cook the g3file
@@ -340,6 +342,8 @@ class g3worker():
             fitsfile = self.get_fitsname(g3file, '_flt')
 
         # Skip if fitsfile exists and overwrite/clobber not True
+        # Note that if skip is False we proceed, and therefore will overwrite
+        # the fitsfile. That why we set overwrite=True in save_skymap_fits()
         if self.skip_fitsfile(fitsfile):
             self.logger.warning(f"File exists, skipping: {fitsfile}")
             return
@@ -383,13 +387,15 @@ class g3worker():
                  mask_id=self.mask_id)
         # Write as FITS file
         self.logger.info(f"Adding SaveMapFrame for: {fitsfile}")
+        # Make sure that the folder exists:
+        create_dir(os.path.dirname(fitsfile))
         pipe.Add(maps.fitsio.SaveMapFrame,
                  map_id=band, output_file=fitsfile,
                  compress=self.config.compress,
-                 overwrite=self.config.clobber, hdr=hdr)
+                 overwrite=True, hdr=hdr)
         self.logger.info(f"Will create fitsfile: {fitsfile}")
         self.logger.info("Running Filtering pipe")
-        pipe.Run(profile=True)
+        pipe.Run(profile=False)
         del pipe
         self.logger.info(f"Total time: {elapsed_time(t0)} for Filtering pipe {g3file}")
 
@@ -624,13 +630,24 @@ def get_NP(MP):
     return NP
 
 
+def create_dir(dirname):
+    "Safely attempt to create a folder"
+    if not os.path.isdir(dirname):
+        LOGGER.info(f"Creating directory {dirname}")
+        try:
+            os.makedirs(dirname, exist_ok=True)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                LOGGER.warning(f"Problem creating {dirname} -- proceeding with trepidation")
+
+
 def chunker(seq, size):
     "Chunk a sequence in chunks of a given size"
     return (seq[pos:pos + size] for pos in range(0, len(seq), size))
 
 
 def relocate_g3file(g3file, outdir, dryrun=False):
-
+    "Function to relcate a 'raw' g3 file"
     # Get the metadata for folder information
     hdr = get_metadata(g3file)
     folder_date = get_folder_date(hdr)
