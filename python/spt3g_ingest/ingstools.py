@@ -14,6 +14,7 @@ import copy
 import shutil
 import magic
 import errno
+import re
 import spt3g_ingest
 from spt3g_ingest import sqltools
 
@@ -485,12 +486,17 @@ def extract_metadata_frame(frame, metadata=None, logger=None):
     for k in iter(frame):
         if k in _keywords_map.keys():
             keyword = _keywords_map[k][0]
+
+            # We need to treat BAND diferently to avoid inconsistensies
+            # in how Id is defined (i.e Coadd_90GHz, 90GHz, vs combined_90GHz)
+            if keyword == 'BAND':
+                value = re.findall("90GHz|150GHz|220GHz", frame[k])[0]
             # Need to re-cast G3Time objects
-            if type(frame[k]) == core.G3Time:
-                gtime = Time(frame[k].isoformat(), format='isot', scale='utc').isot
-                metadata[keyword] = (gtime, _keywords_map[k][1])
+            elif type(frame[k]) == core.G3Time:
+                value = Time(frame[k].isoformat(), format='isot', scale='utc').isot
             else:
-                metadata[keyword] = (frame[k], _keywords_map[k][1])
+                value = frame[k]
+            metadata[keyword] = (value, _keywords_map[k][1])
 
     return metadata
 
