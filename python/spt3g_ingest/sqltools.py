@@ -50,7 +50,7 @@ def fix_fits_keywords(header):
     # Check thet FILETYPE is present, if not set to 'raw'
     if 'FILETYPE' not in header.keys():
         logger.warning("Adding FILETYPE='raw' to header to compatibility")
-        new_header['FILETYPE'] = ('raw', 'The file type')
+        new_header['FILETYPE'] = 'raw'
 
     return new_header
 
