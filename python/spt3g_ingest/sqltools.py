@@ -45,6 +45,13 @@ def fix_fits_keywords(header):
     for key in header.keys():
         new_key = key.replace('-', '_')
         new_header[new_key] = header[key]
+
+    # Making it backwards complatible with older files.
+    # Check thet FILETYPE is present, if not set to 'raw'
+    if 'FILETYPE' not in header.keys():
+        logger.warning("Adding FILETYPE='raw' to header to compatibility")
+        new_header['FILETYPE'] = ('raw', 'The file type')
+
     return new_header
 
 
