@@ -307,10 +307,16 @@ class g3worker():
                 maps.RemoveWeights(frame, zero_nans=True)
                 # Make sure that the folder exists:
                 create_dir(os.path.dirname(fitsfile))
+                # Check for weight Plane before:
+                try:
+                    weight = frame['Wunpol']
+                except KeyError:
+                    weight = None
+                    self.logger.warning("No 'Wunpol' frame to add as weight")
                 maps.fitsio.save_skymap_fits(fitsfile, frame['T'],
                                              overwrite=True,
                                              compress=self.config.compress,
-                                             W=frame['Wunpol'],
+                                             W=weight,
                                              hdr=hdr)
                 self.logger.info(f"Created: {fitsfile}")
         self.logger.info(f"G3 to FITS creation time: {elapsed_time(t0)}")
@@ -512,7 +518,7 @@ def get_metadata(g3file, logger=None):
             if hdr['OBS-ID'][0] is None and hdr['PARENT'][0].split("_")[0] == 'yearly':
                 f = hdr['PARENT'][0].split("_")
                 # from basename get for example: 'yearly_winter_2020'
-                OBSID = ("_".join([f[0], f[2], f[3]]), hdr['OBS-ID'][1])
+                OBSID = ("_".join([f[0]] + f[2:-1]), hdr['OBS-ID'][1])
                 hdr['OBS-ID'] = OBSID
                 hdr['DATE-BEG'] = OBSID
                 logger.info(f"Inserting OBS-ID to header: {hdr['OBS-ID']}")
