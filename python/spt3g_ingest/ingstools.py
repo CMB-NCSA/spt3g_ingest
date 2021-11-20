@@ -649,7 +649,7 @@ def create_dir(dirname):
     if not os.path.isdir(dirname):
         LOGGER.info(f"Creating directory {dirname}")
         try:
-            os.makedirs(dirname, exist_ok=True)
+            os.makedirs(dirname, mode=0o755, exist_ok=True)
         except OSError as e:
             if e.errno != errno.EEXIST:
                 LOGGER.warning(f"Problem creating {dirname} -- proceeding with trepidation")
