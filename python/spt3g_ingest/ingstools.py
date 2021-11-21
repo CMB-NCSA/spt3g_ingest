@@ -360,7 +360,7 @@ class g3worker():
         hdr = copy.deepcopy(self.hdr[g3file])
         # Populate additional metadata for DB
         hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
-        hdr['FILETYPE'] = ('filtered', 'The file type')
+        hdr['FILETYPE'] = ('flt', 'The file type')
 
         # Construct the map_id
         band = hdr['BAND'][0]
