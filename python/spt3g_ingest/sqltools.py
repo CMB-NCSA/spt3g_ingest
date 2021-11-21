@@ -5,6 +5,7 @@ from astropy.time import Time
 import sqlite3
 from spt3g_ingest.data_types import Fd
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +47,20 @@ def fix_fits_keywords(header):
         new_key = key.replace('-', '_')
         new_header[new_key] = header[key]
 
+    # Temporary fix - needs to be removed
     # Making it backwards complatible with older files.
-    # Check thet FILETYPE is present, if not set to 'raw'
+    # Check the FILETYPE is present, if not get from filename
     if 'FILETYPE' not in header.keys():
-        logger.warning("Adding FILETYPE='raw' to header to compatibility")
-        new_header['FILETYPE'] = 'raw'
+        logger.warning("Adding FILETYPE from FITSNAME pattern to header to compatibility")
+        # Try to get it from the filename
+        if re.search('_raw.fits', header['FITSNAME']):
+            new_header['FILETYPE'] = 'raw'
+        elif re.search('_flt.fits', header['FITSNAME']):
+            new_header['FILETYPE'] = 'filtered'
+        # For headers without FILETYPE (i.e.: yearly) we set it to raw
+        else:
+            raise Exception("ERROR: Cannot provide suitable FILETYPE from header or pattern")
+        logger.warning(f"Added FILETYPE {new_header['FILETYPE']} from pattern")
 
     return new_header
 
