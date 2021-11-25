@@ -53,9 +53,9 @@ def fix_fits_keywords(header):
     if 'FILETYPE' not in header.keys():
         logger.warning("Adding FILETYPE from FITSNAME pattern to header to compatibility")
         # Try to get it from the filename
-        if re.search('_raw.fits', header['FITSNAME']):
-            new_header['FILETYPE'] = 'raw'
-        elif re.search('_flt.fits', header['FITSNAME']):
+        if re.search('_passthrough.fits', header['FITSNAME']):
+            new_header['FILETYPE'] = 'psth'
+        elif re.search('_fltd.fits', header['FITSNAME']):
             new_header['FILETYPE'] = 'filtered'
         # For headers without FILETYPE (i.e.: yearly) we set it to raw
         else:

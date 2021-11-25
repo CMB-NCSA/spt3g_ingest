@@ -18,6 +18,9 @@ import re
 import spt3g_ingest
 from spt3g_ingest import sqltools
 
+# The filetype extensions for file types
+FILETYPE_EXT = {'filtered': 'fltd', 'passthrough': 'psth'}
+
 LOGGER = logging.getLogger(__name__)
 
 # Mapping of metadata to FITS keywords
@@ -129,7 +132,7 @@ class g3worker():
         " Run the task(s) for a g3file"
         t0 = time.time()
         self.logger.info(f"Doing: {k}/{self.nfiles} files")
-        self.g3_to_fits_raw(g3file)
+        self.g3_to_fits_passthrough(g3file)
         if self.config.filter_transient:
             self.g3_to_fits_filtd(g3file)
         self.logger.info(f"Completed: {k}/{self.nfiles} files")
@@ -275,7 +278,7 @@ class g3worker():
 
         return g3coadds
 
-    def g3_to_fits_raw(self, g3file, fitsfile=None):
+    def g3_to_fits_passthrough(self, g3file, fitsfile=None):
         """ Dump g3file as fits"""
 
         t0 = time.time()
@@ -284,7 +287,8 @@ class g3worker():
 
         # Define fitsfile name only if undefined
         if fitsfile is None:
-            fitsfile = self.get_fitsname(g3file, '_raw')
+            ext = FILETYPE_EXT['passthrough']
+            fitsfile = self.get_fitsname(g3file, f'_{ext}')
 
         # Skip if fitsfile exists and overwrite/clobber not True
         # Note that if skip is False we proceed, and therefore will overwrite
@@ -297,11 +301,11 @@ class g3worker():
         hdr = copy.deepcopy(self.hdr[g3file])
         # Populate additional metadata for DB
         hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
-        hdr['FILETYPE'] = ('raw', 'The file type')
+        hdr['FILETYPE'] = ('passthrough', 'The file type')
 
         # Second loop to write FITS
         g3 = core.G3File(g3file)
-        self.logger.info(f"Loading: {g3file} for g3_to_fits_raw()")
+        self.logger.info(f"Loading: {g3file} for g3_to_fits_passthrough()")
         for frame in g3:
             # Convert to FITS
             if frame.type == core.G3FrameType.Map:
@@ -347,7 +351,8 @@ class g3worker():
 
         # Define fitsfile name only if undefined
         if fitsfile is None:
-            fitsfile = self.get_fitsname(g3file, '_flt')
+            ext = FILETYPE_EXT['filtered']
+            fitsfile = self.get_fitsname(g3file, f'_{ext}')
 
         # Skip if fitsfile exists and overwrite/clobber not True
         # Note that if skip is False we proceed, and therefore will overwrite
@@ -661,7 +666,7 @@ def chunker(seq, size):
 
 
 def relocate_g3file(g3file, outdir, dryrun=False):
-    "Function to relcate a 'raw' g3 file"
+    "Function to relcate a g3 file by date"
     # Get the metadata for folder information
     hdr = get_metadata(g3file)
     folder_date = get_folder_date(hdr)
