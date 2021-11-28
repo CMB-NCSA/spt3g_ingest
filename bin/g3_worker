@@ -20,7 +20,7 @@ def cmdline():
                         help="Compress (gzip) output files")
     parser.add_argument("--fpack", action='store_true', default=False,
                         help="Fpack output fits file")
-    parser.add_argument("--fpack_options", action="store", default='-g2',
+    parser.add_argument("--fpack_options", action="store", default='-g2 -Y -D',
                         help="Fpack options")
 
     # Filter options

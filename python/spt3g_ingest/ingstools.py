@@ -431,14 +431,16 @@ class g3worker():
         "Run fpack on a fitsfile"
         # Remove fz file if exists
         if os.path.isfile(fitsfile+'.fz'):
+            self.warning(f"Removing {fitsfile}.fz")
             os.remove(fitsfile+'.fz')
         cmd = f"fpack {self.config.fpack_options} {fitsfile}"
         self.logger.info(f"running: {cmd}")
         t0 = time.time()
         return_code = subprocess.call(cmd, shell=True)
+        if return_code > 0:
+            raise RuntimeError("fpack error")
         self.logger.info(f"fpack time: {elapsed_time(t0)}")
         self.logger.info(f"Created: {fitsfile}.fz")
-        os.remove(fitsfile)
         return return_code
 
     def skip_fitsfile(self, fitsfile, size=10):
