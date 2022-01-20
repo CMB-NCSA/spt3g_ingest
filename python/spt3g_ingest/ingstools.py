@@ -20,6 +20,7 @@ from spt3g_ingest import sqltools
 
 # The filetype extensions for file types
 FILETYPE_EXT = {'filtered': 'fltd', 'passthrough': 'psth'}
+FILETYPE_EXT = {'filtered': 'fltd', 'passthrough': 'psth'}
 
 LOGGER = logging.getLogger(__name__)
 
@@ -303,6 +304,9 @@ class g3worker():
         hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
         hdr['FILETYPE'] = ('passthrough', 'The file type')
 
+        # The UNITS
+        hdr['BUNIT'] = ('g3', 'The map units, g3 = 1e-27 [mJy]')
+
         # Second loop to write FITS
         g3 = core.G3File(g3file)
         self.logger.info(f"Loading: {g3file} for g3_to_fits_passthrough()")
@@ -342,7 +346,7 @@ class g3worker():
 
         return
 
-    def g3_to_fits_filtd(self, g3file, fitsfile=None):
+    def g3_to_fits_filtd(self, g3file, fitsfile=None, subtract_coadd=False):
         """Filter a g3file and write result as fits"""
 
         t0 = time.time()
@@ -366,6 +370,9 @@ class g3worker():
         # Populate additional metadata for DB
         hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
         hdr['FILETYPE'] = ('filtered', 'The file type')
+
+        # The UNITS
+        hdr['BUNIT'] = ('g3', 'The map units, g3 = 1e-27 [mJy]')
 
         # Construct the map_id
         band = hdr['BAND'][0]
@@ -397,8 +404,12 @@ class g3worker():
         self.logger.info(f"Adding TransientMapFiltering for {band}")
         pipe.Add(transients.TransientMapFiltering,
                  bands=self.config.band,  # or just band
-                 subtract_coadd=self.subtract_coadd,
+                 subtract_coadd=subtract_coadd,
                  mask_id=self.mask_id)
+
+        # We want the unweighted maps
+        pipe.Add(maps.RemoveWeights, zero_nans=True)
+
         # Write as FITS file
         self.logger.info(f"Adding SaveMapFrame for: {fitsfile}")
         # Make sure that the folder exists:
