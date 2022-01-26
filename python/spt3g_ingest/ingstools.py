@@ -7,7 +7,6 @@ import time
 import logging
 from logging.handlers import RotatingFileHandler
 from astropy.time import Time
-import subprocess
 import multiprocessing as mp
 import types
 import copy
@@ -331,15 +330,9 @@ class g3worker():
                 self.logger.info(f"Created: {fitsfile}")
         self.logger.info(f"G3 to FITS creation time: {elapsed_time(t0)}")
 
-        # If we want to fpack
-        if self.config.fpack:
-            self.run_fpack(fitsfile)
-
         self.logger.info(f"Total FITS creation time: {elapsed_time(t0)}")
 
         if self.config.ingest:
-            if self.config.fpack:
-                fitsfile = fitsfile + ".fz"
             sqltools.ingest_fitsfile(fitsfile, self.config.tablename,
                                      dbname=self.config.dbname,
                                      replace=self.config.replace)
@@ -415,7 +408,7 @@ class g3worker():
         # Make sure that the folder exists:
         create_dir(os.path.dirname(fitsfile))
         pipe.Add(maps.fitsio.SaveMapFrame,
-                 map_id=band, output_file=fitsfile,
+                 output_file=fitsfile,
                  compress=self.config.compress,
                  overwrite=True, hdr=hdr)
         self.logger.info(f"Will create fitsfile: {fitsfile}")
@@ -423,36 +416,13 @@ class g3worker():
         pipe.Run(profile=False)
         del pipe
         self.logger.info(f"Total time: {elapsed_time(t0)} for Filtering pipe {g3file}")
-
-        # If we want to fpack
-        if self.config.fpack:
-            self.run_fpack(fitsfile)
-
         self.logger.info(f"Total FITS creation time: {elapsed_time(t0)}")
 
         if self.config.ingest:
-            if self.config.fpack:
-                fitsfile = fitsfile + ".fz"
             sqltools.ingest_fitsfile(fitsfile, self.config.tablename,
                                      dbname=self.config.dbname,
                                      replace=self.config.replace)
         return
-
-    def run_fpack(self, fitsfile):
-        "Run fpack on a fitsfile"
-        # Remove fz file if exists
-        if os.path.isfile(fitsfile+'.fz'):
-            self.warning(f"Removing {fitsfile}.fz")
-            os.remove(fitsfile+'.fz')
-        cmd = f"fpack {self.config.fpack_options} {fitsfile}"
-        self.logger.info(f"running: {cmd}")
-        t0 = time.time()
-        return_code = subprocess.call(cmd, shell=True)
-        if return_code > 0:
-            raise RuntimeError("fpack error")
-        self.logger.info(f"fpack time: {elapsed_time(t0)}")
-        self.logger.info(f"Created: {fitsfile}.fz")
-        return return_code
 
     def skip_fitsfile(self, fitsfile, size=10):
         """
@@ -462,8 +432,6 @@ class g3worker():
 
         # Get the size fron MB to Bytes
         size = size*1024**2
-        if self.config.fpack:
-            fitsfile = fitsfile + ".fz"
         if os.path.isfile(fitsfile) and not self.config.clobber:
             # Make sure we don't have a zombie file of zero size
             if os.path.getsize(fitsfile) > size:
@@ -508,7 +476,10 @@ def extract_metadata_frame(frame, metadata=None, logger=None):
             # We need to treat BAND diferently to avoid inconsistensies
             # in how Id is defined (i.e Coadd_90GHz, 90GHz, vs combined_90GHz)
             if keyword == 'BAND':
-                value = re.findall("90GHz|150GHz|220GHz", frame[k])[0]
+                try:
+                    value = re.findall("90GHz|150GHz|220GHz", frame[k])[0]
+                except IndexError:
+                    continue
             # Need to re-cast G3Time objects
             elif type(frame[k]) == core.G3Time:
                 value = Time(frame[k].isoformat(), format='isot', scale='utc').isot
@@ -678,12 +649,15 @@ def chunker(seq, size):
     return (seq[pos:pos + size] for pos in range(0, len(seq), size))
 
 
-def relocate_g3file(g3file, outdir, dryrun=False):
+def relocate_g3file(g3file, outdir, dryrun=False, manifest=None):
     "Function to relcate a g3 file by date"
     # Get the metadata for folder information
     hdr = get_metadata(g3file)
     folder_date = get_folder_date(hdr)
     dirname = os.path.join(outdir, folder_date)
+
+    if manifest is not None:
+        manifest.write(f"{g3file} {dirname}\n")
 
     if dryrun:
         LOGGER.info(f"DRYRUN: mv {g3file} {dirname}")
@@ -694,4 +668,5 @@ def relocate_g3file(g3file, outdir, dryrun=False):
         os.mkdir(dirname)
     LOGGER.info(f"Moving {g3file} --> {dirname}")
     shutil.move(g3file, dirname)
+
     return

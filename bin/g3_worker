@@ -16,13 +16,9 @@ def cmdline():
                         required=True, help="Location for output files")
     parser.add_argument("--clobber", action='store_true', default=False,
                         help="Clobber output files")
-    parser.add_argument("--compress", action='store_true', default=False,
-                        help="Compress (gzip) output files")
-    parser.add_argument("--fpack", action='store_true', default=False,
-                        help="Fpack output fits file")
-    parser.add_argument("--fpack_options", action="store", default='-g2 -Y -D',
-                        help="Fpack options")
-
+    parser.add_argument("--compress", type=str, action='store', default='GZIP_2',
+                        choices=[None, 'None', 'GZIP_2', 'GZIP_1'],
+                        help="Compress output files with astropy.io.fits.CompImageHDU")
     # Filter options
     parser.add_argument("--filter_transient", action='store_true', default=False,
                         help="Filter daily maps for transients")
@@ -62,9 +58,8 @@ def cmdline():
 
     args = parser.parse_args()
 
-    # Make sure we do --compress or --fpack
-    if args.compress and args.fpack:
-        sys.exit("ERROR: cannot use both --compress and -fpack")
+    if args.compress == 'None':
+        args.compress = None
 
     # Some checks in case we want to filter for transients
     if args.filter_transient:
@@ -72,7 +67,7 @@ def cmdline():
         if not args.mask:
             raise RuntimeError("Missing mask file")
         # Check that coadds has same number as bands
-        if len(args.coadd) != len(args.band):
+        if args.coadd is not None and len(args.coadd) != len(args.band):
             raise RuntimeError("Missing coadd (g3) files")
 
     return args

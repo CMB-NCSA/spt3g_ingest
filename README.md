@@ -14,8 +14,8 @@ source ~/spt3g_ingest/setpath.sh ~/spt3g_ingest
 
 # Example 1:
 # Ingest files in and just dump the raw maps
-g3_worker /data/spt3g/raw/*.g3.gz --outdir /data/spt3g/products/maps --fpack --clobber
+g3_worker /data/spt3g/raw/*.g3.gz --outdir /data/spt3g/products/maps --compresss GZIP_2 --clobber
 
 # Example 2:
 # Ingest files and filter them for transients
-g3_worker /data/spt3g/raw/*.g3.gz --outdir /data/spt3g/products/maps --mask /data/spt3g/masks/mask_2021_50mJy.g3 --filter_transient --coadd /data/spt3g/raw/yearly_* --fpack --clobber  
+g3_worker /data/spt3g/raw/*.g3.gz --outdir /data/spt3g/products/maps --mask /data/spt3g/masks/mask_2021_50mJy.g3 --filter_transient --coadd /data/spt3g/raw/yearly_* --compress GZIP_2 --clobber  
