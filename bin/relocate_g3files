@@ -41,11 +41,16 @@ if __name__ == "__main__":
 
     logger = logging.getLogger(__name__)
 
+    # Manifest with file movement
+    manifest = open('manifest.txt', 'w')
+    logger.info("Will write manifest to: manifest.txt")
+
     t0 = time.time()
     nfiles = len(args.files)
     k = 1
     for g3file in args.files:
         logger.info(f"Relocating: {k}/{nfiles} files")
-        ingstools.relocate_g3file(g3file, args.outdir, dryrun=args.dryrun)
+        ingstools.relocate_g3file(g3file, args.outdir, dryrun=args.dryrun, manifest=manifest)
         k += 1
+    manifest.close()
     logger.info(f"Total time: {ingstools.elapsed_time(t0)}")
