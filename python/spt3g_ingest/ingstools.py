@@ -88,6 +88,9 @@ class g3worker():
         jobs = []
         # Loop one to defined the jobs
         for g3file in self.config.files:
+            # Avoid small files that make filtering crash
+            if self.skip_g3file(g3file, size=50):
+                continue
             self.logger.info(f"Starting mp.Process for {g3file}")
             fargs = (g3file, k)
             p = mp.Process(target=self.run_g3file, args=fargs)
@@ -107,6 +110,9 @@ class g3worker():
         " Run all g3files serialy "
         k = 1
         for g3file in self.config.files:
+            # Avoid small files that make filtering crash
+            if self.skip_g3file(g3file, size=50):
+                continue
             self.run_g3file(g3file, k)
             k += 1
 
@@ -423,6 +429,15 @@ class g3worker():
                                      dbname=self.config.dbname,
                                      replace=self.config.replace)
         return
+
+    def skip_g3file(self, g3file, size=50):
+        file_size = os.path.getsize(g3file)/1024**2
+        if file_size < size:
+            skip = True
+            self.logger.warning(f"File size: {file_size:.2f} Mb < {size} Mb, skipping: {g3file}")
+        else:
+            skip = False
+        return skip
 
     def skip_fitsfile(self, fitsfile, size=10):
         """
