@@ -16,6 +16,7 @@ import errno
 import re
 import spt3g_ingest
 from spt3g_ingest import sqltools
+from tempfile import mkdtemp
 
 # The filetype extensions for file types
 FILETYPE_EXT = {'filtered': 'fltd', 'passthrough': 'psth'}
@@ -315,13 +316,25 @@ class g3worker():
         # Second loop to write FITS
         g3 = core.G3File(g3file)
         self.logger.info(f"Loading: {g3file} for g3_to_fits_passthrough()")
+
+        # Make sure that the folder exists:
+        create_dir(os.path.dirname(fitsfile))
+
+        # Change the path of the fitsfile is indirect_write
+        if self.config.indirect_write:
+            # Keep the orginal name
+            fitsfile_keep = fitsfile
+            tmp_dir = mkdtemp(prefix=self.config.indirect_write_prefix)
+            fitsfile = os.path.join(tmp_dir, os.path.basename(fitsfile_keep))
+            self.logger.info(f"Will use indirect_write to {fitsfile}")
+            # Make sure that the folder exists:
+            create_dir(os.path.dirname(fitsfile))
+
         for frame in g3:
             # Convert to FITS
             if frame.type == core.G3FrameType.Map:
                 self.logger.info(f"Transforming to FITS: {frame.type} -- Id: {frame['Id']}")
                 maps.RemoveWeights(frame, zero_nans=True)
-                # Make sure that the folder exists:
-                create_dir(os.path.dirname(fitsfile))
                 # Check for weight Plane before:
                 try:
                     weight = frame['Wunpol']
@@ -333,8 +346,15 @@ class g3worker():
                                              compress=self.config.compress,
                                              W=weight,
                                              hdr=hdr)
-                self.logger.info(f"Created: {fitsfile}")
-        self.logger.info(f"G3 to FITS creation time: {elapsed_time(t0)}")
+        self.logger.info(f"Created: {fitsfile}")
+        self.logger.info(f"Total time: {elapsed_time(t0)} for passthrough: {g3file}")
+
+        # And now we write back fits file to the orginal location
+        if self.config.indirect_write:
+            self.logger.info(f"Moving {fitsfile} --> {fitsfile_keep}")
+            shutil.move(fitsfile, fitsfile_keep)
+            shutil.rmtree(tmp_dir)
+            fitsfile = fitsfile_keep
 
         self.logger.info(f"Total FITS creation time: {elapsed_time(t0)}")
 
@@ -413,6 +433,17 @@ class g3worker():
         self.logger.info(f"Adding SaveMapFrame for: {fitsfile}")
         # Make sure that the folder exists:
         create_dir(os.path.dirname(fitsfile))
+
+        # Change the path of the fitsfile is indirect_write
+        if self.config.indirect_write:
+            # Keep the orginal name
+            fitsfile_keep = fitsfile
+            tmp_dir = mkdtemp(prefix=self.config.indirect_write_prefix)
+            fitsfile = os.path.join(tmp_dir, os.path.basename(fitsfile_keep))
+            self.logger.info(f"Will use indirect_write to {fitsfile}")
+            # Make sure that the folder exists:
+            create_dir(os.path.dirname(fitsfile))
+
         pipe.Add(maps.fitsio.SaveMapFrame,
                  output_file=fitsfile,
                  compress=self.config.compress,
@@ -421,7 +452,16 @@ class g3worker():
         self.logger.info("Running Filtering pipe")
         pipe.Run(profile=False)
         del pipe
-        self.logger.info(f"Total time: {elapsed_time(t0)} for Filtering pipe {g3file}")
+        self.logger.info(f"Created: {fitsfile}")
+        self.logger.info(f"Total time: {elapsed_time(t0)} for Filtering: {g3file}")
+
+        # And now we write back fits file to the orginal location
+        if self.config.indirect_write:
+            self.logger.info(f"Moving {fitsfile} --> {fitsfile_keep}")
+            shutil.move(fitsfile, fitsfile_keep)
+            shutil.rmtree(tmp_dir)
+            fitsfile = fitsfile_keep
+
         self.logger.info(f"Total FITS creation time: {elapsed_time(t0)}")
 
         if self.config.ingest:
