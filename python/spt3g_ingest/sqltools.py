@@ -1,6 +1,6 @@
 
 import os
-from astropy.io import fits
+import astropy
 from astropy.time import Time
 import sqlite3
 from spt3g_ingest.data_types import Fd
@@ -28,12 +28,22 @@ def read_header(fitsfile):
     """
     Read in the FITS file header using astropy.fits
     """
-    if fitsfile.endswith('.fz'):
-        hdu = 1
-    else:
-        hdu = 0
-    F = fits.open(fitsfile)
-    header = F[hdu].header
+    is_compressed = False
+    with astropy.io.fits.open(fitsfile) as fits:
+        for k in range(len(fits)):
+            h = fits[k]._header
+            if not h.get('ZIMAGE'):
+                continue
+            if h['ZIMAGE'] is True:
+                is_compressed = True
+                continue
+
+        if is_compressed:
+            hdu = 1
+        else:
+            hdu = 0
+        header = fits[hdu].header
+
     return header
 
 
