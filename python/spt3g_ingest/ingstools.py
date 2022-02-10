@@ -311,13 +311,13 @@ class g3worker():
         hdr['FILETYPE'] = ('passthrough', 'The file type')
 
         # The UNITS
-        hdr['BUNIT'] = ('g3', 'The map units, g3 = 1e-27 [mJy]')
+        hdr['BUNIT'] = ('mK', 'Flux in [mK]')
 
         # Second loop to write FITS
         g3 = core.G3File(g3file)
         self.logger.info(f"Loading: {g3file} for g3_to_fits_passthrough()")
 
-        # Make sure that the folder exists:
+        # Make sure that the folder exists: n
         create_dir(os.path.dirname(fitsfile))
 
         # Change the path of the fitsfile is indirect_write
@@ -335,6 +335,7 @@ class g3worker():
             if frame.type == core.G3FrameType.Map:
                 self.logger.info(f"Transforming to FITS: {frame.type} -- Id: {frame['Id']}")
                 maps.RemoveWeights(frame, zero_nans=True)
+                remove_units(frame, units=core.G3Units.mK)
                 # Check for weight Plane before:
                 try:
                     weight = frame['Wunpol']
@@ -391,7 +392,7 @@ class g3worker():
         hdr['FILETYPE'] = ('filtered', 'The file type')
 
         # The UNITS
-        hdr['BUNIT'] = ('g3', 'The map units, g3 = 1e-27 [mJy]')
+        hdr['BUNIT'] = ('mJy', 'Flux is in [mJy]')
 
         # Construct the map_id
         band = hdr['BAND'][0]
@@ -428,7 +429,7 @@ class g3worker():
 
         # We want the unweighted maps
         pipe.Add(maps.RemoveWeights, zero_nans=True)
-
+        pipe.Add(remove_units, units=core.G3Units.mJy)
         # Write as FITS file
         self.logger.info(f"Adding SaveMapFrame for: {fitsfile}")
         # Make sure that the folder exists:
@@ -725,3 +726,18 @@ def relocate_g3file(g3file, outdir, dryrun=False, manifest=None):
     shutil.move(g3file, dirname)
 
     return
+
+
+def remove_units(frame, units):
+    "Remove units for g3 frame"
+    if frame.type != core.G3FrameType.Map:
+        return frame
+    t_scale = units if frame['T'].weighted else 1./units
+    w_scale = units * units
+    for k in ['T', 'Q', 'U']:
+        if k in frame:
+            frame[k] = frame.pop(k) * t_scale
+    for k in ['Wunpol', 'Wpol']:
+        if k in frame:
+            frame[k] = frame.pop(k) * w_scale
+    return frame
