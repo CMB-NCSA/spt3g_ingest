@@ -82,6 +82,9 @@ def cmdline():
             args.indirect_write_path = os.environ['SPT3G_CUTTER_INDIRECT_WRITE_PATH']
         else:
             args.indirect_write_path = '/tmp'
+
+    # Define the prefix
+    if args.indirect_write:
         args.indirect_write_prefix = os.path.join(args.indirect_write_path, 'spt3g_ingest-')
     return args
 
