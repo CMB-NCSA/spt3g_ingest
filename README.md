@@ -33,6 +33,20 @@ docker run -ti \
 
 During the observing season (or as needed) new `g3.gz` maps are manually synced from U. Chicago to the spt3g server at NCSA. The newly arrived files are staged in  the `/data/spt3g/incoming` folder until these are relocated to its permanent place `/data/spt3g/raw` where they live in a sub-folder keyed to `YYYY-MM`
 
+#### Relocation:
+
+In order to relocate the incoming g3 files, the following command will move them to their final destination on `/data/spt3g/raw/YYYY-MM` (the `--dryrun` will not move the files): 
+```
+relocate_g3files /data/spt3g/incoming/*g3.gz  --outdir /data/spt3g/raw
+```
+
+It's a good idea to cordon the new files to a separate folder until we have fully processed them. Use the `--dryrun` to test first.
+
+```
+relocate_g3files /data/spt3g/incoming/*g3.gz  --outdir /data/spt3g/raw-2022Jun22
+```
+The script will write a file `manifest.txt` with the results of the relocation.
+
 
 Example
 -------
