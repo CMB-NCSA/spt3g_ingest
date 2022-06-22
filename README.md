@@ -1,9 +1,19 @@
 # spt3g_ingest
 
-Description
------------
+## Description
 
-Set of tools to ingest and filter SPT3G maps as FITS files.
+Set of tools to ingest and filter g3 maps from SPT as FITS files, so they can be consumed by the thumbnail cutter `spt3g_cutter` that runs under the hood of the [**SPT3G Thumbnail Server**](http://spt3g.ncsa.illinois.edu) at NCSA.
+
+Here we describe the current workflow which involves the following steps:
+ 1) Relocate (i.e. ingest) incoming files, 
+ 2) Filter and transform g3 files into FITS (done at ICC)
+ 3) Ingest into the database.
+
+## Operational Steps
+
+### 1. File Transfer and Relocation
+
+During the observing season (or as needed) new `g3.gz` maps are manually synced from U. Chicago to the spt3g server at NCSA. The newly arrived files are staged in  the `/data/spt3g/incoming` folder until these are relocated to its permanent place `/data/spt3g/raw` where they live in a sub-folder keyed to `YYYY-MM`
 
 Example
 -------
