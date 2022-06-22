@@ -11,9 +11,28 @@ Here we describe the current workflow which involves the following steps:
 
 ## Operational Steps
 
+The `spt3g_ingest` tools run inside containers, which are defined in the [`spt3g_ingest-recipes`](https://github.com/CMB-NCSA/spt3g_ingest-recipes) repo, and available in docker hub. For testing and development we run inside docker containers on machines provisioned via [Radiant.](https://wiki.ncsa.illinois.edu/display/PUBCR/Radiant)
+For the large jobs on the Illiois Campus Cluster (ICC) we use singularity images based on the Docker images.
+
+For developing on Radiant we use a start-up script 
+
+```
+%> cat  ./start_docker.sh
+NAME=spt3gingest
+IMAGE=menanteau/spt3g_ingest
+TAG=ubuntu_0.3.3_8a5d1d1c
+docker run -ti \
+       -h `hostname -s`-docker  \
+       -v /data/spt3g:/data/spt3g\
+       -v $HOME/spt3g-devel/home-felipe:/home/felipe\
+       --name $NAME\
+        $IMAGE:$TAG bash
+```
+
 ### 1. File Transfer and Relocation
 
 During the observing season (or as needed) new `g3.gz` maps are manually synced from U. Chicago to the spt3g server at NCSA. The newly arrived files are staged in  the `/data/spt3g/incoming` folder until these are relocated to its permanent place `/data/spt3g/raw` where they live in a sub-folder keyed to `YYYY-MM`
+
 
 Example
 -------
