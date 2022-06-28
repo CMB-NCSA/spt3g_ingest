@@ -47,18 +47,34 @@ relocate_g3files /data/spt3g/incoming/*g3.gz  --outdir /data/spt3g/raw-2022Jun22
 ```
 The script will write a file `manifest.txt` with the results of the relocation.
 
+Once the files have been relocated, we need to transfer them to the mirror archive on the ICC. The best way to this is to use `bbcp` with a call that looks like:
+```
+ bbcp -s 12 -w 264000  -v -P 8 -N io "gtar  -c -O -C /data/spt3g/ raw-2022Jun22   " 'golubh2.campuscluster.illinois.edu:gtar  -x -C /projects/caps/spt3g/raw/'
+```
 
-Example
--------
-```bash
-# Setup the path for spt3g_software and spt3g_ingest
-source ~/spt3g_ingest/setpath.sh ~/spt3g_ingest
-/opt/spt/spt3g_software/build/env-shell.sh
+### 2. Filter and transform g3 files into FITS 
 
-# Example 1:
-# Ingest files in and just dump the raw maps
-g3_worker /data/spt3g/raw/*.g3.gz --outdir /data/spt3g/products/maps --compresss GZIP_2 --clobber
+This step is performed that the ICC, where a typical call looks like:
+```
+g3_worker ${INPUTLIST}
+  --outdir /projects/caps/spt3g/2022-June-maps
+  --mask /projects/caps/spt3g/masks/mask_2021_50mJy.g3
+  --filter_transient
+  --indirect_write
+  --indirect_write_path /dev/shm
+  --np ${cpus_per_task}
+```
 
-# Example 2:
-# Ingest files and filter them for transients
-g3_worker /data/spt3g/raw/*.g3.gz --outdir /data/spt3g/products/maps --mask /data/spt3g/masks/mask_2021_50mJy.g3 --filter_transient --coadd /data/spt3g/raw/yearly_* --compress GZIP_2 --clobber  
+However, to submit a large batch job we use the module [spt3g_jobs](https://github.com/CMB-NCSA/spt3g_jobs) which is already installed on the ICC. These are the steps to submit a large job:
+
+```
+# Set the environment
+source /projects/caps/spt3g/opt/miniconda3/bin/activate
+```
+
+```
+# 320 wide all bands, 2022 data
+chunk_filelist /projects/caps/spt3g/raw/2022-*/*g3.gz  --outdir ~/slurm-jobs/lists --base files_allbands_2022  --nchunks 40
+create_jobs -c spt3g_ingest_320wide_allbands.yaml  --loop_list /home/felipe/slurm-jobs/lists/files_allbands_2022_main.list --submit_dir submit_dir_320wide.allbands_2022
+sbatch submit_dir_320wide.allbands_2022/submitN.sl
+```
