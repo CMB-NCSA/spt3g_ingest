@@ -78,3 +78,9 @@ chunk_filelist /projects/caps/spt3g/raw/2022-*/*g3.gz  --outdir ~/slurm-jobs/lis
 create_jobs -c spt3g_ingest_320wide_allbands.yaml  --loop_list /home/felipe/slurm-jobs/lists/files_allbands_2022_main.list --submit_dir submit_dir_320wide.allbands_2022
 sbatch submit_dir_320wide.allbands_2022/submitN.sl
 ```
+### 4. Copy files back to archive and Ingest
+To ingest the new files, for example:
+
+```
+ingest_fits /data/spt3g/products/maps/2022-06/*.fits --tablename file_info_v2
+```
