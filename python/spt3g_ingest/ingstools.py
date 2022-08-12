@@ -92,6 +92,7 @@ class g3worker():
             # Avoid small files that make filtering crash
             if self.skip_g3file(g3file, size=50):
                 continue
+
             self.logger.info(f"Starting mp.Process for {g3file}")
             fargs = (g3file, k)
             p = mp.Process(target=self.run_g3file, args=fargs)
@@ -139,6 +140,11 @@ class g3worker():
         " Run the task(s) for a g3file"
         t0 = time.time()
         self.logger.info(f"Doing: {k}/{self.nfiles} files")
+
+        # Stage if needed
+        if self.config.stage:
+            g3file = self.stage_g3file(g3file)
+
         self.g3_to_fits_passthrough(g3file)
         if self.config.filter_transient:
             self.g3_to_fits_filtd(g3file)
@@ -500,6 +506,18 @@ class g3worker():
         else:
             skip = False
         return skip
+
+    def stage_g3file(self, g3file):
+        """
+        Stage input g3file to the stage directory
+        """
+        tmp_dir = mkdtemp(prefix=self.config.stage_prefix)
+        g3file_copy = os.path.join(tmp_dir, os.path.basename(g3file))
+        self.logger.info(f"Will stage: {g3file} --> {g3file_copy}")
+        # Make sure that the folder exists:
+        create_dir(os.path.dirname(g3file_copy))
+        shutil.copy2(g3file, g3file_copy)
+        return g3file_copy
 
 
 def pre_populate_metadata(metadata=None):

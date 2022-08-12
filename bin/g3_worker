@@ -41,9 +41,15 @@ def cmdline():
     parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g.db",
                         help="Name of the sqlite3 database file")
 
+    # Read options
+    parser.add_argument("--stage", action='store_true', default=False,
+                        help="Stage input files before operanting on them.")
+    parser.add_argument("--stage_path", action='store', default=None,
+                        help="Path for indirect write.")
+
     # Write options
     parser.add_argument("--indirect_write", action='store_true', default=False,
-                        help="Use indirect write of files to /tmp before moving to destionation.")
+                        help="Use indirect write of files to /tmp before moving to destination.")
     parser.add_argument("--indirect_write_path", action='store', default=None,
                         help="Path for indirect write.")
 
@@ -78,14 +84,25 @@ def cmdline():
 
     # Check environmental variables for indirect_write
     if args.indirect_write_path is None and args.indirect_write is True:
-        if 'SPT3G_CUTTER_INDIRECT_WRITE_PATH' in os.environ:
-            args.indirect_write_path = os.environ['SPT3G_CUTTER_INDIRECT_WRITE_PATH']
+        if 'SPT3G_INGEST_WRITE_PATH' in os.environ:
+            args.indirect_write_path = os.environ['SPT3G_INGEST_INDIRECT_WRITE_PATH']
         else:
             args.indirect_write_path = '/tmp'
 
-    # Define the prefix
+    if args.stage_path is None and args.stage is True:
+        if 'SPT3G_INGEST_STAGE_PATH' in os.environ:
+            args.stage_path = os.environ['SPT3G_INGEST_STAGE_PATH']
+        else:
+            args.stage_path = '/tmp'
+
+    # Define the prefix for indirect_write
     if args.indirect_write:
-        args.indirect_write_prefix = os.path.join(args.indirect_write_path, 'spt3g_ingest-')
+        args.indirect_write_prefix = os.path.join(args.indirect_write_path, 'spt3g_ingest-write')
+
+    # Define the prefix for staging input files
+    if args.stage:
+        args.stage_prefix = os.path.join(args.stage_path, 'spt3g_ingest-stage')
+
     return args
 
 
