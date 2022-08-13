@@ -148,6 +148,11 @@ class g3worker():
         self.g3_to_fits_passthrough(g3file)
         if self.config.filter_transient:
             self.g3_to_fits_filtd(g3file)
+
+        # Remove stage file
+        if self.config.stage:
+            self.remove_staged_file(g3file)
+
         self.logger.info(f"Completed: {k}/{self.nfiles} files")
         self.logger.info(f"Total time: {elapsed_time(t0)} for: {g3file}")
 
@@ -466,7 +471,7 @@ class g3worker():
         if self.config.indirect_write:
             self.logger.info(f"Moving {fitsfile} --> {fitsfile_keep}")
             shutil.move(fitsfile, fitsfile_keep)
-            shutil.rmtree(tmp_dir)
+
             fitsfile = fitsfile_keep
 
         self.logger.info(f"Total FITS creation time: {elapsed_time(t0)}")
@@ -518,6 +523,14 @@ class g3worker():
         create_dir(os.path.dirname(g3file_copy))
         shutil.copy2(g3file, g3file_copy)
         return g3file_copy
+
+    def remove_staged_file(self, g3file):
+        self.logger.info(f"Removing: {g3file}")
+        os.remove(g3file)
+
+        tmp_dir = os.path.basedir(g3file)
+        self.logger.infor(f"Removing tmp dir: {tmp_dir}")
+        shutil.rmtree(tmp_dir)
 
 
 def pre_populate_metadata(metadata=None):

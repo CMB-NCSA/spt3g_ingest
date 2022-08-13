@@ -97,11 +97,11 @@ def cmdline():
 
     # Define the prefix for indirect_write
     if args.indirect_write:
-        args.indirect_write_prefix = os.path.join(args.indirect_write_path, 'spt3g_ingest-write')
+        args.indirect_write_prefix = os.path.join(args.indirect_write_path, 'spt3g_ingest-write-')
 
     # Define the prefix for staging input files
     if args.stage:
-        args.stage_prefix = os.path.join(args.stage_path, 'spt3g_ingest-stage')
+        args.stage_prefix = os.path.join(args.stage_path, 'spt3g_ingest-stage-')
 
     return args
 
