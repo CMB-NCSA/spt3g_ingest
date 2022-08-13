@@ -528,7 +528,7 @@ class g3worker():
         self.logger.info(f"Removing: {g3file}")
         os.remove(g3file)
 
-        tmp_dir = os.path.basedir(g3file)
+        tmp_dir = os.path.dirname(g3file)
         self.logger.infor(f"Removing tmp dir: {tmp_dir}")
         shutil.rmtree(tmp_dir)
 
