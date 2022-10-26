@@ -1,6 +1,6 @@
 # Tools to load g3 files and manipulate/convert into FITS
 
-from spt3g import core, maps, transients
+from spt3g import core, maps, transients, sources
 import os
 import sys
 import time
@@ -17,6 +17,7 @@ import re
 import spt3g_ingest
 from spt3g_ingest import sqltools
 from tempfile import mkdtemp
+import numexpr as ne
 
 # The filetype extensions for file types
 FILETYPE_EXT = {'filtered': 'fltd', 'passthrough': 'psth'}
@@ -51,10 +52,6 @@ class g3worker():
 
         # Check input files vs file list
         self.check_input_files()
-
-        # Load mask for transients
-        if self.config.mask:
-            self.load_mask()
 
         # Load coadds for transients
         if self.config.coadd is not None:
@@ -163,12 +160,16 @@ class g3worker():
         self.basename = {}
         self.folder_date = {}
         self.precooked = {}
+        self.field_season = {}
 
         # The number of files to process
         self.nfiles = len(self.config.files)
 
         # Get the number of processors to use
         self.NP = get_NP(self.config.np)
+
+        # Set the number of threads for numexpr
+        self.set_nthreads()
 
         # Check DB table exists
         if self.config.ingest:
@@ -187,6 +188,8 @@ class g3worker():
         self.hdr[g3file] = get_metadata(g3file)
         self.folder_date[g3file] = get_folder_date(self.hdr[g3file])
         self.precooked[g3file] = True
+        if self.config.filter_transient:
+            self.field_season[g3file] = get_field_season(self.hdr[g3file])
 
     def get_fitsname(self, g3file, suffix=''):
         "Set the name for the output fitsfile"
@@ -205,25 +208,6 @@ class g3worker():
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Logging Started at level:{self.config.loglevel}")
         self.logger.info(f"Running spt3g_ingest version: {spt3g_ingest.__version__}")
-
-    def load_mask(self):
-        """Load the mask for filter_transient routines"""
-        t0 = time.time()
-        self.logger.info(f"Reading mask file: {self.config.mask}")
-        self.g3mask = None
-        for frame in core.G3File(self.config.mask):
-            if frame.type != core.G3FrameType.Map:
-                continue
-            if "Mask" in frame:
-                self.g3mask = frame["Mask"]
-            else:
-                self.g3mask = frame["T"]
-            break
-        if self.g3mask is None:
-            raise RuntimeError("Missing mask frame")
-        self.mask_id = "Mask"
-        self.logger.info(f"Total time reading {self.config.mask}: {elapsed_time(t0)}")
-        return
 
     def load_coadds(self):
         """
@@ -420,14 +404,6 @@ class g3worker():
             pipe.Add(maps.InjectMaps, map_id=map_id,
                      maps_in=self.g3coadds[map_id], ignore_missing_weights=True)
 
-        elif self.config.mask is not None:
-            # mask has been injected in coadd.
-            # this handles the no-coadd case
-            self.logger.info(f"Adding mask InjectMaps for {self.mask_id}")
-            pipe.Add(maps.InjectMaps, map_id=self.mask_id,
-                     maps_in={"T": self.g3mask},
-                     ignore_missing_weights=True)
-
         if not self.config.polarized:
             pipe.Add(maps.map_modules.MakeMapsUnpolarized)
 
@@ -436,7 +412,7 @@ class g3worker():
         pipe.Add(transients.TransientMapFiltering,
                  bands=self.config.band,  # or just band
                  subtract_coadd=subtract_coadd,
-                 mask_id=self.mask_id)
+                 field=self.field_season[g3file])
 
         # We want the unweighted maps
         pipe.Add(maps.RemoveWeights, zero_nans=True)
@@ -532,6 +508,14 @@ class g3worker():
         self.logger.info(f"Removing tmp dir: {tmp_dir}")
         shutil.rmtree(tmp_dir)
 
+    def set_nthreads(self):
+        ncores = ne.detect_number_of_cores()
+        self.nthread = int(ncores/self.NP)
+        if self.nthread < 1:
+            self.nthread = 1
+        ne.set_num_threads(self.nthread)
+        self.logger.info(f"Set the number of threads for numexpr as {self.nthread}")
+
 
 def pre_populate_metadata(metadata=None):
     """ Pre-populate metadata dict with None if not defined"""
@@ -610,6 +594,30 @@ def get_metadata(g3file, logger=None):
 
     logger.info(f"Metadata Extraction time: {elapsed_time(t0)}")
     return hdr
+
+
+def get_field_season(hdr, logger=None):
+    """
+    Get the field name for the g3file
+    """
+
+    if not logger:
+        logger = LOGGER
+
+    field_name = hdr['OBJECT'][0]
+    parent = hdr['PARENT'][0]
+    # Check if this is a winter/yearly field
+    if field_name is None:
+        if ('winter' in parent or 'yearly' in parent):
+            field_season = 'spt3g-winter'
+        else:
+            logger.warning(f"Cannot find field_name for field_name:{field_name}")
+            field_season = None
+    else:
+        field_season = sources.get_field_season(field_name)
+
+    logger.info(f"Will use field: {field_season} for file: {parent}")
+    return field_season
 
 
 def get_folder_date(hdr):
