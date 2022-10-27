@@ -509,10 +509,14 @@ class g3worker():
         shutil.rmtree(tmp_dir)
 
     def set_nthreads(self):
-        ncores = ne.detect_number_of_cores()
-        self.nthread = int(ncores/self.NP)
-        if self.nthread < 1:
-            self.nthread = 1
+        """Set the number of theards for numexpr"""
+        if self.config.ntheads == 0:
+            ncores = ne.detect_number_of_cores()
+            self.nthread = int(ncores/self.NP)
+            if self.nthread < 1:
+                self.nthread = 1
+        else:
+            self.nthread = self.config.ntheads
         ne.set_num_threads(self.nthread)
         self.logger.info(f"Set the number of threads for numexpr as {self.nthread}")
 
