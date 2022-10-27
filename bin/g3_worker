@@ -22,8 +22,6 @@ def cmdline():
     # Filter options
     parser.add_argument("--filter_transient", action='store_true', default=False,
                         help="Filter daily maps for transients")
-    parser.add_argument("--mask", action="store", default=None,
-                        help="Input mask for filter transients")
     parser.add_argument("--coadd", nargs="*", default=None,
                         help="Name of the coadd filenames (g3)")
     parser.add_argument("--band", nargs="*", default=['90GHz', '150GHz', '220GHz'],
@@ -75,9 +73,6 @@ def cmdline():
 
     # Some checks in case we want to filter for transients
     if args.filter_transient:
-        # Check for mask
-        if not args.mask:
-            raise RuntimeError("Missing mask file")
         # Check that coadds has same number as bands
         if args.coadd is not None and len(args.coadd) != len(args.band):
             raise RuntimeError("Missing coadd (g3) files")
