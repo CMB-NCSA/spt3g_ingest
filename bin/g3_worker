@@ -29,6 +29,9 @@ def cmdline():
     parser.add_argument("--polarized", action="store_true", default=False,
                         help="Filter polarized maps.")
 
+    # Custom field Name
+    parser.add_argument("--field_name", type=str, default=None,
+                        help="SPT field name (optional) to insert as OBJECT")
     # Ingest options
     parser.add_argument("--ingest", action='store_true', default=False,
                         help="Ingest files")

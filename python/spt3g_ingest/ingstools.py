@@ -186,6 +186,11 @@ class g3worker():
         self.basename[g3file] = get_g3basename(g3file)
         # Get the metadata of the g3file
         self.hdr[g3file] = get_metadata(g3file)
+        # Update the field name if passed in the command line
+        if self.config.field_name:
+            self.hdr[g3file]['OBJECT'] = (self.config.field_name, self.hdr[g3file]['OBJECT'][1])
+            self.logger.info(f"Updated metadata for OBJECT with: {self.config.field_name}")
+
         self.folder_date[g3file] = get_folder_date(self.hdr[g3file])
         self.precooked[g3file] = True
         if self.config.filter_transient:
