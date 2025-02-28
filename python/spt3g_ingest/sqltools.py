@@ -84,8 +84,12 @@ def extract_values_header(header):
         try:
             values.append(str(header[k]))
         except KeyError:
-            pass
-            logger.debug('{} Not Found'.format(k))
+            # These 3 values are now missing from the headers
+            if k in ['DATEREF','MJDREFI','MJDREFF']:
+                values.append(str(None))
+            else:
+                pass
+                logger.debug('{} Not Found'.format(k))
     return values
 
 

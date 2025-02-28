@@ -13,7 +13,7 @@ data_files = [("", ["setpath.sh"])]
 
 # The main call
 setup(name='spt3g_ingest',
-      version='0.3.7',
+      version='0.3.8',
       license="GPL",
       description="Ingesting for SPT3G",
       author="Felipe Menanteau",
