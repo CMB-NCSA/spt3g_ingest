@@ -3,25 +3,28 @@ import os
 import astropy
 from astropy.time import Time
 import sqlite3
-from spt3g_ingest.data_types import Fd
+import spt3g_ingest.data_types as data_types
 import logging
 import re
 
 logger = logging.getLogger(__name__)
 
-# SQL string definitions
-# Create SQL statement to create table automatically
-_table_statement = ''
-for k in Fd.keys():
-    _table_statement += '{} {},\n'.format(k, Fd[k])
-# remove last comma
-_table_statement += 'UNIQUE(ID) '
-_table_statement = _table_statement.rstrip(',\n')
-
 # Template to insert a row
 _insert_row = """
 INSERT{or_replace}INTO {tablename} values ({values})
 """
+
+
+def make_table_statement(Fd):
+    # SQL string definitions
+    # Create SQL statement to create table automatically
+    table_statement = ''
+    for k in Fd.keys():
+        table_statement += '{} {},\n'.format(k, Fd[k])
+    # remove last comma
+    table_statement += 'UNIQUE(ID) '
+    table_statement = table_statement.rstrip(',\n')
+    return table_statement
 
 
 def read_header(fitsfile):
@@ -75,7 +78,7 @@ def fix_fits_keywords(header):
     return new_header
 
 
-def extract_values_header(header):
+def extract_values_header(header, Fd=data_types.Fd):
 
     # Create the ingested values in the same order,
     # starting for those 3 keys by hand
@@ -85,7 +88,7 @@ def extract_values_header(header):
             values.append(str(header[k]))
         except KeyError:
             # These 3 values are now missing from the headers
-            if k in ['DATEREF','MJDREFI','MJDREFF']:
+            if k in ['DATEREF', 'MJDREFI', 'MJDREFF']:
                 values.append(str(None))
             else:
                 pass
@@ -93,46 +96,42 @@ def extract_values_header(header):
     return values
 
 
-def connect_db(dbname, tablename='FILE_INFO_V0'):
+def connect_db(dbname, tablename='FILE_INFO_V0', Fd=data_types.Fd):
     """Establisih connection to DB"""
-
     logger.info(f"Establishing DB connection to: {dbname}")
-
     # Connect to DB
     # SQLlite DB lives in a file
     con = sqlite3.connect(dbname)
-
-    # Create the table
-    create_table = """
-    CREATE TABLE IF NOT EXISTS {tablename} (
-    {statement}
-    )
-    """.format(**{'tablename': tablename, 'statement': _table_statement})
-    logger.debug(create_table)
-
-    cur = con.cursor()
-    cur.execute(create_table)
-    con.commit()
+    # Create the table if does not exist
+    check_dbtable(dbname, tablename, Fd=Fd)
     return con
 
 
-def check_dbtable(dbname, tablename):
-    """ Check tablename exists in database"""
-    logger.info(f"Checking {tablename} exits in: {dbname}")
-    # Connect to DB
+def check_dbtable(dbname, tablename, con=None, Fd=data_types.Fd):
+    """ Check if tablename exists in database"""
+    logger.info(f"Checking if {tablename} exits in: {dbname}")
+    # Connect to DB, make new connection if not available
+    if not con:
+        close_con = True
+        con = sqlite3.connect(dbname)
+    else:
+        close_con = False
+
     con = sqlite3.connect(dbname)
     # Create the table
+    table_statement = make_table_statement(Fd)
     create_table = """
     CREATE TABLE IF NOT EXISTS {tablename} (
     {statement}
     )
-    """.format(**{'tablename': tablename, 'statement': _table_statement})
+    """.format(**{'tablename': tablename, 'statement': table_statement})
     logger.debug(create_table)
 
     cur = con.cursor()
     cur.execute(create_table)
     con.commit()
-    con.close()
+    if close_con:
+        con.close()
     return
 
 
@@ -192,6 +191,61 @@ def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None, replace=False):
         logger.info(f"Ingestion Done for: {fitsfile}")
     except sqlite3.IntegrityError:
         logger.warning(f"NOT UNIQUE: ingestion failed for {fitsfile}")
+
+    if close_con:
+        con.close()
+
+
+def ingest_g3file(header, tablename, con=None, dbname=None, replace=False):
+    """ Ingest file into an sqlite3 table"""
+
+    # Make new connection if not available
+    if con is None:
+        close_con = True
+        con = sqlite3.connect(dbname)
+    else:
+        close_con = False
+
+    # Get cursor
+    cur = con.cursor()
+
+    if replace:
+        or_replace = ' OR REPLACE '
+    else:
+        or_replace = ' '
+
+    g3file = header['FILENAME']
+    logger.info(f"Ingesting: {g3file} to: {tablename}")
+
+    # Extra metadata for ingestion
+    INGESTION_DATE = Time.now().isot
+
+    header['INGESTION_DATE'] = INGESTION_DATE
+    header['FILETYPE'] = 'RAW'
+    # Replace '-' with "_"
+    header = fix_fits_keywords(header)
+
+    # Create the ingested values in the same order,
+    # starting for those 3 keys by hand
+    values = []
+    values = values + extract_values_header(header, Fd=data_types.g3Fd)
+
+    # Convert the values into a long string
+    vvv = ''
+    for v in values:
+        vvv += '\"' + v + '\", '
+    vvv = vvv.rstrip(', ')
+
+    query = _insert_row.format(**{'or_replace': or_replace,
+                                  'tablename': tablename, 'values': vvv})
+
+    logger.debug(f"Executing:{query}")
+    try:
+        cur.execute(query)
+        con.commit()
+        logger.info(f"Ingestion Done for: {g3file}")
+    except sqlite3.IntegrityError:
+        logger.warning(f"NOT UNIQUE: ingestion failed for {g3file}")
 
     if close_con:
         con.close()

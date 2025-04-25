@@ -21,16 +21,17 @@ import numexpr as ne
 
 # The filetype extensions for file types
 FILETYPE_EXT = {'filtered': 'fltd', 'passthrough': 'psth'}
-FILETYPE_EXT = {'filtered': 'fltd', 'passthrough': 'psth'}
 
 LOGGER = logging.getLogger(__name__)
 
 # Mapping of metadata to FITS keywords
 _keywords_map = {'ObservationStart': ('DATE-BEG', 'Observation start date'),
                  'ObservationStop': ('DATE-END', 'Observation end date'),
-                 'ObservationID': ('OBS-ID', 'Observation ID'),
-                 'Id': ('BAND', 'Band name'),
-                 'SourceName': ('OBJECT', 'Name of object'),
+                 # 'ObservationID': ('OBS-ID', 'Observation ID'),
+                 'ObservationID': ('OBSID', 'Observation ID'),
+                 'Id': ('BAND', 'Observing Frequency'),
+                 # 'SourceName': ('OBJECT', 'Name of object'),
+                 'SourceName': ('FIELD', 'Name of Observing Field'),
                  }
 
 
@@ -567,6 +568,9 @@ def extract_metadata_frame(frame, metadata=None, logger=None):
                 value = frame[k]
             metadata[keyword] = (value, _keywords_map[k][1])
 
+    # For backwards compatibily we add copies for OBS-ID and OBJECT
+    metadata['OBS-ID'] = metadata['OBSID']
+    metadata['OBJECT'] = metadata['FIELD']
     return metadata
 
 
@@ -772,8 +776,25 @@ def relocate_g3file(g3file, outdir, dryrun=False, manifest=None):
         os.mkdir(dirname)
     LOGGER.info(f"Moving {g3file} --> {dirname}")
     shutil.move(g3file, dirname)
-
     return
+
+
+def digest_g3file(g3file):
+    "Function to digest a g3 file"
+    # Get the metadata for folder information
+    hdr = get_metadata(g3file)
+    # Repack header to astropy format
+    for key in hdr.keys():
+        hdr[key] = hdr[key][0]
+
+    hdr['ID'] = os.path.basename(g3file).split('.g3')[0]
+    hdr['FILENAME'] = os.path.basename(g3file)
+    hdr['FILEPATH'] = os.path.dirname(g3file)
+    # Store the relative filepath, remove basepath from Taiga
+    # We need to chage this to /project/ncsa/caps/spt3g on ICC
+    string_to_remove = "/data/spt3g/"
+    hdr['FILEPATH'] = hdr['FILEPATH'].replace(string_to_remove, "")
+    return hdr
 
 
 def remove_units(frame, units):

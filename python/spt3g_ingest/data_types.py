@@ -54,3 +54,20 @@ Fd['POLTYPE'] = 'TEXT'
 Fd['OVERFLOW'] = 'FLOAT'
 Fd['FLATPOL'] = 'VARCHAR(1)'
 # Fd['CHECKSUM'] = 'TEXT'
+
+# Create a ordered dictionary, order is important for ingestion
+g3Fd = OrderedDict()
+
+# From file info not in header
+g3Fd['ID'] = 'TEXT'
+g3Fd['FILENAME'] = 'TEXT'
+g3Fd['FILEPATH'] = 'TEXT'
+g3Fd['FILETYPE'] = 'VARCHAR(100)'
+g3Fd['INGESTION_DATE'] = 'TEXT'
+# From header
+g3Fd['PARENT'] = 'VARCHAR(100)'
+g3Fd['DATE_BEG'] = 'TEXT'
+g3Fd['DATE_END'] = 'TEXT'
+g3Fd['FIELD'] = 'VARCHAR(30)'
+g3Fd['OBSID'] = 'VARCHAR(100)'
+g3Fd['BAND'] = 'VARCHAR(10)'
