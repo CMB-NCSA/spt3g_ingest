@@ -6,6 +6,7 @@ import sqlite3
 import spt3g_ingest.data_types as data_types
 import logging
 import re
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -196,18 +197,8 @@ def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None, replace=False):
         con.close()
 
 
-def ingest_g3file(header, tablename, con=None, dbname=None, replace=False):
+def ingest_g3file(header, tablename, dbname=None, replace=False):
     """ Ingest file into an sqlite3 table"""
-
-    # Make new connection if not available
-    if con is None:
-        close_con = True
-        con = sqlite3.connect(dbname)
-    else:
-        close_con = False
-
-    # Get cursor
-    cur = con.cursor()
 
     if replace:
         or_replace = ' OR REPLACE '
@@ -238,14 +229,27 @@ def ingest_g3file(header, tablename, con=None, dbname=None, replace=False):
 
     query = _insert_row.format(**{'or_replace': or_replace,
                                   'tablename': tablename, 'values': vvv})
-
     logger.debug(f"Executing:{query}")
-    try:
-        cur.execute(query)
-        con.commit()
-        logger.info(f"Ingestion Done for: {g3file}")
-    except sqlite3.IntegrityError:
-        logger.warning(f"NOT UNIQUE: ingestion failed for {g3file}")
+    execute_with_retry(g3file, query, dbname, max_retries=10)
 
-    if close_con:
-        con.close()
+
+def execute_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):
+    for attempt in range(max_retries):
+        try:
+            con = sqlite3.connect(dbname)
+            cursor = con.cursor()
+            cursor.execute(query)
+            con.commit()
+            logger.info(f"Ingestion Done for: {g3file}")
+            return
+        except sqlite3.IntegrityError:
+            logger.warning(f"NOT UNIQUE: ingestion failed for {g3file}")
+            return
+        except sqlite3.OperationalError as e:
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                raise e
+        finally:
+            if con:
+                con.close()

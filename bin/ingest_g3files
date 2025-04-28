@@ -48,17 +48,13 @@ if __name__ == "__main__":
 
     logger = logging.getLogger(__name__)
 
-    # Prepare DB in case we want to ingeste
-    con = sqltools.connect_db(args.dbname, args.tablename, Fd=data_types.g3Fd)
-    con = None
-
     t0 = time.time()
     nfiles = len(args.files)
     k = 1
     for g3file in args.files:
         logger.info(f"Ingesting g3 file to DB: {k}/{nfiles} files")
         hdr = ingstools.digest_g3file(g3file)
-        sqltools.ingest_g3file(hdr, args.tablename, con=con,
+        sqltools.ingest_g3file(hdr, args.tablename,
                                dbname=args.dbname,
                                replace=args.replace)
         k += 1
