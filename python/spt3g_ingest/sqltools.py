@@ -247,7 +247,7 @@ def execute_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):
             return
         except sqlite3.OperationalError as e:
             if attempt < max_retries - 1:
-                logger.warning(f"WARNING: ingestion {attempt/max_retries} failed "
+                logger.warning(f"WARNING: ingestion {attempt}/{max_retries} failed "
                                f"for:{g3file} -- will retry in {retry_delay}[sec]")
                 time.sleep(retry_delay)
             else:
