@@ -179,8 +179,12 @@ def ingest_fitsfile(fitsfile, tablename, dbname=None, replace=False):
     execute_with_retry(fitsfile, query, dbname, max_retries=10)
 
 
-def ingest_g3file(header, tablename, dbname=None, replace=False):
+def ingest_g3file(header, tablename, dbname=None, replace=False, dryrun=False):
     """ Ingest file into an sqlite3 table"""
+
+    # Repack header to astropy format
+    for key in header.keys():
+        header[key] = header[key][0]
 
     if replace:
         or_replace = ' OR REPLACE '
@@ -212,7 +216,10 @@ def ingest_g3file(header, tablename, dbname=None, replace=False):
     query = _insert_row.format(**{'or_replace': or_replace,
                                   'tablename': tablename, 'values': vvv})
     logger.debug(f"Executing:{query}")
-    execute_with_retry(g3file, query, dbname, max_retries=10)
+    if dryrun:
+        logger.info(f"DRYRUN: {query}")
+    else:
+        execute_with_retry(g3file, query, dbname, max_retries=10)
 
 
 def execute_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):

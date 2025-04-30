@@ -4,6 +4,7 @@ import argparse
 import logging
 import time
 from spt3g_ingest import ingstools
+from spt3g_ingest import sqltools
 
 
 def cmdline():
@@ -15,6 +16,15 @@ def cmdline():
                         required=True, help="Location for output files")
     parser.add_argument("--dryrun", action='store_true', default=False,
                         help="Dry run")
+    # Ingest options
+    parser.add_argument("--ingest", action='store_true', default=False,
+                        help="Ingest to DB")
+    parser.add_argument("--replace", action='store_true', default=False,
+                        help="Replace ingest entry")
+    parser.add_argument("--tablename", action='store', default="g3file_info",
+                        help="Table name with file infomation")
+    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_raw.db",
+                        help="Name of the sqlite3 database file")
 
     # Logging options (loglevel/log_format/log_format_date)
     default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
@@ -50,7 +60,12 @@ if __name__ == "__main__":
     k = 1
     for g3file in args.files:
         logger.info(f"Relocating: {k}/{nfiles} files")
-        ingstools.relocate_g3file(g3file, args.outdir, dryrun=args.dryrun, manifest=manifest)
+        hdr = ingstools.relocate_g3file(g3file, args.outdir, dryrun=args.dryrun, manifest=manifest)
+        if args.ingest:
+            sqltools.ingest_g3file(hdr, args.tablename,
+                                   dbname=args.dbname,
+                                   dryrun=args.dryrun,
+                                   replace=args.replace)
         k += 1
     manifest.close()
     logger.info(f"Total time: {ingstools.elapsed_time(t0)}")

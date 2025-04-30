@@ -760,40 +760,41 @@ def chunker(seq, size):
 def relocate_g3file(g3file, outdir, dryrun=False, manifest=None):
     "Function to relcate a g3 file by date"
     # Get the metadata for folder information
-    hdr = get_metadata(g3file)
+    hdr = digest_g3file(g3file)
     folder_date = get_folder_date(hdr)
     dirname = os.path.join(outdir, folder_date)
+    # We need to tweak the FILEPATH keyword in the header with
+    # the final location
+    hdr['FILEPATH'] = (f"raw/{folder_date}", "Folder path based on date-obs")
 
     if manifest is not None:
         manifest.write(f"{g3file} {dirname}\n")
 
     if dryrun:
         LOGGER.info(f"DRYRUN: mv {g3file} {dirname}")
-        return
+        return hdr
 
     if not os.path.isdir(dirname):
         LOGGER.info(f"Creating directory {dirname}")
         os.mkdir(dirname)
     LOGGER.info(f"Moving {g3file} --> {dirname}")
     shutil.move(g3file, dirname)
-    return
+
+    return hdr
 
 
 def digest_g3file(g3file):
     "Function to digest a g3 file"
     # Get the metadata for folder information
     hdr = get_metadata(g3file)
-    # Repack header to astropy format
-    for key in hdr.keys():
-        hdr[key] = hdr[key][0]
-
-    hdr['ID'] = os.path.basename(g3file).split('.g3')[0]
-    hdr['FILENAME'] = os.path.basename(g3file)
-    hdr['FILEPATH'] = os.path.dirname(g3file)
+    hdr['ID'] = (os.path.basename(g3file).split('.g3')[0], 'ID')
+    hdr['FILENAME'] = (os.path.basename(g3file), 'The Filename')
     # Store the relative filepath, remove basepath from Taiga
     # We need to chage this to /project/ncsa/caps/spt3g on ICC
     string_to_remove = "/data/spt3g/"
-    hdr['FILEPATH'] = hdr['FILEPATH'].replace(string_to_remove, "")
+    filepath = os.path.dirname(g3file)
+    filepath = filepath.replace(string_to_remove, "")
+    hdr['FILEPATH'] = (filepath, 'The Filepath')
     return hdr
 
 
