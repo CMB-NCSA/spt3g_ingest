@@ -53,7 +53,9 @@ if __name__ == "__main__":
     nfiles = len(args.files)
     k = 1
     for fitsfile in args.files:
-        logger.info(f"Doing: {k}/{nfiles} files")
-        sqltools.ingest_fitsfile(fitsfile, args.tablename, con=con, replace=args.replace)
-        logger.info(f"Total time: {ingstools.elapsed_time(t0)}")
+        logger.info(f"Ingesting FITS file to DB: {k}/{nfiles} files")
+        sqltools.ingest_fitsfile(fitsfile, args.tablename,
+                                 dbname=args.dbname,
+                                 replace=args.replace)
         k += 1
+    logger.info(f"Total time: {ingstools.elapsed_time(t0)}")

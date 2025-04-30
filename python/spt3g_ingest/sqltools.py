@@ -136,18 +136,8 @@ def check_dbtable(dbname, tablename, con=None, Fd=data_types.Fd):
     return
 
 
-def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None, replace=False):
+def ingest_fitsfile(fitsfile, tablename, dbname=None, replace=False):
     """ Ingest file into an sqlite3 table"""
-
-    # Make new connection if not available
-    if not con:
-        close_con = True
-        con = sqlite3.connect(dbname)
-    else:
-        close_con = False
-
-    # Get cursor
-    cur = con.cursor()
 
     if replace:
         or_replace = ' OR REPLACE '
@@ -186,15 +176,7 @@ def ingest_fitsfile(fitsfile, tablename, con=None, dbname=None, replace=False):
                                   'tablename': tablename, 'values': vvv})
 
     logger.debug(f"Executing:{query}")
-    try:
-        cur.execute(query)
-        con.commit()
-        logger.info(f"Ingestion Done for: {fitsfile}")
-    except sqlite3.IntegrityError:
-        logger.warning(f"NOT UNIQUE: ingestion failed for {fitsfile}")
-
-    if close_con:
-        con.close()
+    execute_with_retry(fitsfile, query, dbname, max_retries=10)
 
 
 def ingest_g3file(header, tablename, dbname=None, replace=False):
