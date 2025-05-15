@@ -21,7 +21,7 @@ import numexpr as ne
 
 # The filetype extensions for file types
 FILETYPE_SUFFIX = {'filtered': 'fltd', 'passthrough': 'psth'}
-FILETYPE_EXT = {'FITS': 'fits', 'G3': 'g3,', 'G3GZ': 'g3.gz'}
+FILETYPE_EXT = {'FITS': 'fits', 'G3': 'g3', 'G3GZ': 'g3.gz'}
 
 
 LOGGER = logging.getLogger(__name__)
@@ -29,10 +29,8 @@ LOGGER = logging.getLogger(__name__)
 # Mapping of metadata to FITS keywords
 _keywords_map = {'ObservationStart': ('DATE-BEG', 'Observation start date'),
                  'ObservationStop': ('DATE-END', 'Observation end date'),
-                 # 'ObservationID': ('OBS-ID', 'Observation ID'),
                  'ObservationID': ('OBSID', 'Observation ID'),
                  'Id': ('BAND', 'Observing Frequency'),
-                 # 'SourceName': ('OBJECT', 'Name of object'),
                  'SourceName': ('FIELD', 'Name of Observing Field'),
                  }
 
@@ -192,9 +190,8 @@ class g3worker():
         self.hdr[g3file] = get_metadata(g3file)
         # Update the field name if passed in the command line
         if self.config.field_name:
-            self.hdr[g3file]['OBJECT'] = (self.config.field_name, self.hdr[g3file]['OBJECT'][1])
-            self.hdr[g3file]['FIELD'] = (self.config.field_name, self.hdr[g3file]['OBJECT'][1])
-            self.logger.info(f"Updated metadata for OBJECT with: {self.config.field_name}")
+            self.hdr[g3file]['FIELD'] = (self.config.field_name, self.hdr[g3file]['FIELD'][1])
+            self.logger.info(f"Updated metadata for FIELD with: {self.config.field_name}")
 
         self.folder_date[g3file] = get_folder_date(self.hdr[g3file])
         self.precooked[g3file] = True
@@ -308,13 +305,13 @@ class g3worker():
         # Define fitsfile name only if undefined
         if fitsfile is None:
             suffix = FILETYPE_SUFFIX['passthrough']
-            fitsfile = self.get_fitsname(g3file, suffix=suffix)
+            fitsfile = self.set_outname(g3file, suffix=suffix, filetype="FITS")
 
         # Skip if fitsfile exists and overwrite/clobber not True
         # Note that if skip is False we proceed, and therefore will overwrite
         # the fitsfile. That why we set overwrite=True in save_skymap_fits()
-        if self.skip_fitsfile(fitsfile):
-            self.logger.warning(f"File exists, skipping: {fitsfile}")
+        if self.skip_filename(fitsfile):
+            self.logger.warning(f"File already exists, skipping: {fitsfile}")
             return
 
         # Make a copy of the header to modify
@@ -322,11 +319,7 @@ class g3worker():
         # Populate additional metadata for DB
         hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
         hdr['FILETYPE'] = ('passthrough', 'The file type')
-
-        # The UNITS
-        hdr['BUNIT'] = ('mK', 'Flux in [mK]')
-
-        print(hdr)
+        hdr['PARENT'] = (os.path.basename(g3file), 'Name of parent file')
 
         # Second loop to write FITS
         g3 = core.G3File(g3file)
@@ -392,7 +385,7 @@ class g3worker():
         suffix = FILETYPE_SUFFIX['filtered']
         outname = {}
         for filetype in self.config.filetypes:
-            outname[filetype] = self.get_outname(g3file, suffix=suffix, filetype=filetype)
+            outname[filetype] = self.set_outname(g3file, suffix=suffix, filetype=filetype)
 
         print(outname)
         self.logger.info(f"Total time: {elapsed_time(t0)} for Filtering: {g3file}")
@@ -504,22 +497,22 @@ class g3worker():
             skip = False
         return skip
 
-    def skip_fitsfile(self, fitsfile, size=10):
+    def skip_filename(self, filename, size=10):
         """
-        Check if fitsfile should be skipped, checking if the file exists
-        and that is greater than [size] (in MB)
+        Check if filename (fits file) should be skipped, checking if the file
+        exists and that is greater than [size] (in MB)
         """
 
         # Get the size fron MB to Bytes
         size = size*1024**2
-        if os.path.isfile(fitsfile) and not self.config.clobber:
+        if os.path.isfile(filename) and not self.config.clobber:
             # Make sure we don't have a zombie file of zero size
-            if os.path.getsize(fitsfile) > size:
+            if os.path.getsize(filename) > size:
                 skip = True
-                self.logger.warning(f"File exists, skipping: {fitsfile}")
+                self.logger.warning(f"File exists, skipping: {filename}")
             else:
-                self.logger.warning(f"Found zombie file: {fitsfile}, will remove it")
-                os.remove(fitsfile)
+                self.logger.warning(f"Found zombie file: {filename}, will remove it")
+                os.remove(filename)
                 skip = False
         else:
             skip = False
@@ -648,7 +641,7 @@ def get_field_season(hdr, logger=None):
     if not logger:
         logger = LOGGER
 
-    field_name = hdr['OBJECT'][0]
+    field_name = hdr['FIELD'][0]
     parent = hdr['PARENT'][0]
     # Check if this is a winter/yearly field
     if field_name is None:
