@@ -53,7 +53,8 @@ def cmdline():
                         help="Use indirect write of files to /tmp before moving to destination.")
     parser.add_argument("--indirect_write_path", action='store', default=None,
                         help="Path for indirect write.")
-
+    parser.add_argument("--output_filetypes", nargs='+', default=['FITS'],
+                        help="Output filetype [G3, FITS]")
     # Logging options (loglevel/log_format/log_format_date)
     default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
     default_log_format_date = '%Y-%m-%d %H:%M:%S'

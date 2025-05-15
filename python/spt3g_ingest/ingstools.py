@@ -20,7 +20,9 @@ from tempfile import mkdtemp
 import numexpr as ne
 
 # The filetype extensions for file types
-FILETYPE_EXT = {'filtered': 'fltd', 'passthrough': 'psth'}
+FILETYPE_SUFFIX = {'filtered': 'fltd', 'passthrough': 'psth'}
+FILETYPE_EXT = {'FITS': 'fits', 'G3': 'g3,', 'G3GZ': 'g3.gz'}
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -143,9 +145,10 @@ class g3worker():
         if self.config.stage:
             g3file = self.stage_g3file(g3file)
 
-        self.g3_to_fits_passthrough(g3file)
+        self.g3_to_fits(g3file)
+        exit()
         if self.config.filter_transient:
-            self.g3_to_fits_filtd(g3file)
+            self.g3_transient_filter(g3file)
 
         # Remove stage file
         if self.config.stage:
@@ -190,6 +193,7 @@ class g3worker():
         # Update the field name if passed in the command line
         if self.config.field_name:
             self.hdr[g3file]['OBJECT'] = (self.config.field_name, self.hdr[g3file]['OBJECT'][1])
+            self.hdr[g3file]['FIELD'] = (self.config.field_name, self.hdr[g3file]['OBJECT'][1])
             self.logger.info(f"Updated metadata for OBJECT with: {self.config.field_name}")
 
         self.folder_date[g3file] = get_folder_date(self.hdr[g3file])
@@ -197,11 +201,19 @@ class g3worker():
         if self.config.filter_transient:
             self.field_season[g3file] = get_field_season(self.hdr[g3file])
 
+    def set_outname(self, g3file, suffix='', filetype='FITS'):
+        "Set the name for the output filename"
+        ext = FILETYPE_EXT[filetype]
+        outname = os.path.join(self.config.outdir,
+                               self.folder_date[g3file],
+                               f"{self.basename[g3file]}_{suffix}.{ext}")
+        return outname
+
     def get_fitsname(self, g3file, suffix=''):
         "Set the name for the output fitsfile"
         fitsfile = os.path.join(self.config.outdir,
                                 self.folder_date[g3file],
-                                f"{self.basename[g3file]}{suffix}.fits")
+                                f"{self.basename[g3file]}_{suffix}.fits")
         return fitsfile
 
     def setup_logging(self):
@@ -286,7 +298,7 @@ class g3worker():
 
         return g3coadds
 
-    def g3_to_fits_passthrough(self, g3file, fitsfile=None):
+    def g3_to_fits(self, g3file, fitsfile=None, trim=False):
         """ Dump g3file as fits"""
 
         t0 = time.time()
@@ -295,8 +307,8 @@ class g3worker():
 
         # Define fitsfile name only if undefined
         if fitsfile is None:
-            ext = FILETYPE_EXT['passthrough']
-            fitsfile = self.get_fitsname(g3file, f'_{ext}')
+            suffix = FILETYPE_SUFFIX['passthrough']
+            fitsfile = self.get_fitsname(g3file, suffix=suffix)
 
         # Skip if fitsfile exists and overwrite/clobber not True
         # Note that if skip is False we proceed, and therefore will overwrite
@@ -314,9 +326,11 @@ class g3worker():
         # The UNITS
         hdr['BUNIT'] = ('mK', 'Flux in [mK]')
 
+        print(hdr)
+
         # Second loop to write FITS
         g3 = core.G3File(g3file)
-        self.logger.info(f"Loading: {g3file} for g3_to_fits_passthrough()")
+        self.logger.info(f"Loading: {g3file} for g3_to_fits()")
 
         # Make sure that the folder exists: n
         create_dir(os.path.dirname(fitsfile))
@@ -367,6 +381,23 @@ class g3worker():
 
         return
 
+    def g3_transient_filter(self, g3file, subtract_coadd=False):
+        """
+        Perform Transient filer on a g3file and write result as G3/FITS
+        """
+        t0 = time.time()
+        # Pre-cook the g3file
+        self.precook_g3file(g3file)
+
+        suffix = FILETYPE_SUFFIX['filtered']
+        outname = {}
+        for filetype in self.config.filetypes:
+            outname[filetype] = self.get_outname(g3file, suffix=suffix, filetype=filetype)
+
+        print(outname)
+        self.logger.info(f"Total time: {elapsed_time(t0)} for Filtering: {g3file}")
+        return
+
     def g3_to_fits_filtd(self, g3file, fitsfile=None, subtract_coadd=False):
         """Filter a g3file and write result as fits"""
 
@@ -376,7 +407,7 @@ class g3worker():
 
         # Define fitsfile name only if undefined
         if fitsfile is None:
-            ext = FILETYPE_EXT['filtered']
+            ext = FILETYPE_SUFFIX['filtered']
             fitsfile = self.get_fitsname(g3file, f'_{ext}')
 
         # Skip if fitsfile exists and overwrite/clobber not True
