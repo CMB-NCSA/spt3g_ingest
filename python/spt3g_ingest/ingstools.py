@@ -18,6 +18,10 @@ import spt3g_ingest
 from spt3g_ingest import sqltools
 from tempfile import mkdtemp
 import numexpr as ne
+import numpy as np
+import math
+import astropy
+from astropy.nddata import Cutout2D
 
 # The filetype extensions for file types
 FILETYPE_SUFFIX = {'filtered': 'fltd', 'passthrough': 'psth'}
@@ -25,6 +29,7 @@ FILETYPE_EXT = {'FITS': 'fits', 'G3': 'g3', 'G3GZ': 'g3.gz'}
 
 
 LOGGER = logging.getLogger(__name__)
+logger = LOGGER
 
 # Mapping of metadata to FITS keywords
 _keywords_map = {'ObservationStart': ('DATE-BEG', 'Observation start date'),
@@ -206,12 +211,12 @@ class g3worker():
                                f"{self.basename[g3file]}_{suffix}.{ext}")
         return outname
 
-    def get_fitsname(self, g3file, suffix=''):
-        "Set the name for the output fitsfile"
-        fitsfile = os.path.join(self.config.outdir,
-                                self.folder_date[g3file],
-                                f"{self.basename[g3file]}_{suffix}.fits")
-        return fitsfile
+#    def get_fitsname(self, g3file, suffix=''):
+#        "Set the name for the output fitsfile"
+#        fitsfile = os.path.join(self.config.outdir,
+#                                self.folder_date[g3file],
+#                                f"{self.basename[g3file]}_{suffix}.fits")
+#        return fitsfile
 
     def setup_logging(self):
         """ Simple logger that uses configure_logger() """
@@ -295,7 +300,7 @@ class g3worker():
 
         return g3coadds
 
-    def g3_to_fits(self, g3file, fitsfile=None, trim=False):
+    def g3_to_fits(self, g3file, overwrite=False, fitsfile=None, trim=True):
         """ Dump g3file as fits"""
 
         t0 = time.time()
@@ -342,19 +347,47 @@ class g3worker():
             # Convert to FITS
             if frame.type == core.G3FrameType.Map:
                 self.logger.info(f"Transforming to FITS: {frame.type} -- Id: {frame['Id']}")
+
+                self.logger.debug("Removing weights")
                 maps.RemoveWeights(frame, zero_nans=True)
-                remove_units(frame, units=core.G3Units.mK)
-                # Check for weight Plane before:
-                try:
-                    weight = frame['Wunpol']
-                except KeyError:
-                    weight = None
-                    self.logger.warning("No 'Wunpol' frame to add as weight")
-                maps.fitsio.save_skymap_fits(fitsfile, frame['T'],
-                                             overwrite=True,
-                                             compress=self.config.compress,
-                                             W=weight,
-                                             hdr=hdr)
+                maps.MakeMapsUnpolarized(frame)
+                # Get the units of the Temperature map and add to the header
+                units, units_name = get_T_frame_units(frame)
+                hdr['UNITS'] = (units, f"Data units {units_name}")
+                self.logger.debug(f"Removing G3 units --> {units_name}")
+                remove_g3_units(frame, units=core.G3Units.mK)
+
+                # In case we have many bands per g3 file
+                band = frame['Id']
+                # We need to add band to the filename, so we have different
+                # outputs
+                basename = fitsfile.split(".")[0]
+                if band not in basename:
+                    fitsfile = f"{basename}_{band}.fits"
+                    self.logger.info(f"Adding {band} to output file: {fitsfile}")
+
+                if trim:
+                    field = hdr['FIELD'][0]
+                    self.logger.info(f"Will write trimmed FITS file for field: {field}")
+                    save_skymap_fits_trim(frame, fitsfile, field,
+                                          hdr=hdr,
+                                          compress=self.config.compress,
+                                          overwrite=True)
+                else:
+                    # Get the T and weight frames
+                    T = frame['T']
+                    try:
+                        W = frame.get('Wpol', frame.get('Wunpol', None))
+                    except KeyError:
+                        W = None
+                        self.logger.warning("No 'Wpol/Wunpol' frame to add as weight")
+                    maps.fitsio.save_skymap_fits(
+                        fitsfile, T,
+                        overwrite=True,
+                        compress=self.config.compress,
+                        hdr=hdr,
+                        W=W)
+
         self.logger.info(f"Created: {fitsfile}")
         self.logger.info(f"Total time: {elapsed_time(t0)} for passthrough: {g3file}")
 
@@ -541,6 +574,7 @@ class g3worker():
     def set_nthreads(self):
         """Set the number of theards for numexpr"""
         if self.config.ntheads == 0:
+            # ncores = os.cpu_count()
             ncores = ne.detect_number_of_cores()
             self.nthread = int(ncores/self.NP)
             if self.nthread < 1:
@@ -565,19 +599,23 @@ def pre_populate_metadata(metadata=None):
     return metadata
 
 
-def extract_metadata_frame(frame, metadata=None, logger=None):
+def extract_metadata_frame(frame, metadata=None):
     """
-    Extract selected metadata from a g3 frame
-    """
+    Extract selected metadata from a frame in a G3 file.
 
+    Parameters:
+    - frame: A frame object from the G3 file.
+    - metadata (dict): A dictionary to store the extracted metadata (optional).
+
+    Returns:
+    - metadata (dict): Updated metadata dictionary with extracted values.
+    """
     # Loop over all items and select only the ones in the Mapping
     if not metadata:
         metadata = {}
-
     for k in iter(frame):
         if k in _keywords_map.keys():
             keyword = _keywords_map[k][0]
-
             # We need to treat BAND diferently to avoid inconsistensies
             # in how Id is defined (i.e Coadd_90GHz, 90GHz, vs combined_90GHz)
             if keyword == 'BAND':
@@ -586,7 +624,7 @@ def extract_metadata_frame(frame, metadata=None, logger=None):
                 except IndexError:
                     continue
             # Need to re-cast G3Time objects
-            elif type(frame[k]) == core.G3Time:
+            elif isinstance(frame[k], core.G3Time):
                 value = Time(frame[k].isoformat(), format='isot', scale='utc').isot
             else:
                 value = frame[k]
@@ -596,6 +634,26 @@ def extract_metadata_frame(frame, metadata=None, logger=None):
     metadata['OBS-ID'] = metadata['OBSID']
     metadata['OBJECT'] = metadata['FIELD']
     return metadata
+
+
+def get_T_frame_units(frame):
+    """Get the units of the Temperature frame"""
+
+    if 'T' not in frame:
+        msg = "'T' map not present in frame"
+        LOGGER.error(msg)
+        raise Exception(msg)
+
+    units_name = frame['T'].units.name
+    if units_name == 'Tcmb':
+        units = core.G3Units.uK
+        name = "uK"
+    elif units_name == 'FluxDensity':
+        units = core.G3Units.mJy
+        name = "mJy"
+    else:
+        raise Exception(f"cannot extract units from frame[T]: {frame['T']}")
+    return units, f"{units_name}[{name}]"
 
 
 def get_metadata(g3file, logger=None):
@@ -614,6 +672,7 @@ def get_metadata(g3file, logger=None):
     g3 = core.G3File(g3file)
     logger.info(f"Loading: {g3file} for metadata extraction")
     for frame in g3:
+
         # Extract metadata
         if frame.type == core.G3FrameType.Observation or frame.type == core.G3FrameType.Map:
             logger.info(f"Extracting metadata from frame: {frame.type}")
@@ -822,7 +881,7 @@ def digest_g3file(g3file):
     return hdr
 
 
-def remove_units(frame, units):
+def remove_g3_units(frame, units):
     "Remove units for g3 frame"
     if frame.type != core.G3FrameType.Map:
         return frame
@@ -835,3 +894,148 @@ def remove_units(frame, units):
         if k in frame:
             frame[k] = frame.pop(k) * w_scale
     return frame
+
+
+def crossRAzero(ras):
+    """
+    Check if the RA coordinates cross RA=0 and adjust accordingly.
+
+    Parameters:
+    - ras (array): An array of RA coordinates.
+
+    Returns:
+    - tuple: A tuple (CROSSRA0, ras) where CROSSRA0 is a boolean indicating if
+      RA crosses zero, and ras is the adjusted RA array.
+    """    # Make sure that they are numpy objetcs
+    ras = np.array(ras)
+    racmin = ras.min()
+    racmax = ras.max()
+    if (racmax - racmin) > 180.:
+        # Currently we switch order. Perhaps better to +/-360.0?
+        # Note we want the total extent which is not necessarily the maximum
+        # and minimum in this case
+        ras2 = ras
+        wsm = np.where(ras > 180.0)
+        ras2[wsm] = ras[wsm] - 360.
+        CROSSRA0 = True
+        ras = ras2
+    else:
+        CROSSRA0 = False
+    return CROSSRA0, ras
+
+
+def save_skymap_fits_trim(frame, fitsfile, field, hdr=None, compress=False,
+                          overwrite=True):
+    """
+    Save a trimmed version of the sky map to a FITS file.
+
+    Parameters:
+    - frame: A frame object containing the map data.
+    - fitsfile (str): The path to the output FITS file.
+    - field (str): The field name to be used for trimming.
+    - hdr (astropy.io.fits.Header): Header to be included in FITS (optional).
+    - compress (bool): If True, compresses the FITS file.
+    - overwrite (bool): If True, overwrites the existing FITS file.
+    """
+    if frame.type != core.G3FrameType.Map:
+        raise TypeError(f"Input map: {frame.type} must be a FlatSkyMap or HealpixSkyMap")
+
+    ctype = None
+    if compress is True:
+        ctype = 'GZIP_2'
+    elif isinstance(compress, str):
+        ctype = compress
+
+    # Get the T and weight frames
+    T = frame['T']
+    W = frame.get('Wpol', frame.get('Wunpol', None))
+
+    data_sci = np.asarray(T)
+    if W is not None:
+        data_wgt = np.asarray(W.TT)
+    logger.debug("Read data and weight")
+
+    # Get the box size and center position to trim
+    xc, yc, xsize, ysize = get_field_bbox(field, T.wcs)
+    # Trim sci and wgt image using astropy cutour2D
+    cutout_sci = Cutout2D(data_sci, (xc, yc), (ysize, xsize), wcs=T.wcs)
+    cutout_wgt = Cutout2D(data_wgt, (xc, yc), (ysize, xsize), wcs=T.wcs)
+    if hdr is None:
+        hdr = maps.fitsio.create_wcs_header(T)
+    hdr.update(cutout_sci.wcs.to_header())
+    hdr_sci = copy.deepcopy(hdr)
+    hdr_wgt = copy.deepcopy(hdr)
+    hdr_wgt['ISWEIGHT'] = True
+
+    hdul = astropy.io.fits.HDUList()
+    if compress:
+        logger.debug(f"Will compress using: {ctype} compression")
+        hdu_sci = astropy.io.fits.CompImageHDU(
+            data=cutout_sci.data,
+            name='SCI',
+            header=hdr_sci,
+            compression_type=ctype)
+        if W:
+            hdu_wgt = astropy.io.fits.CompImageHDU(
+                data=cutout_wgt.data,
+                name='WGT',
+                header=hdr_wgt,
+                compression_type=ctype)
+    else:
+        hdu_sci = astropy.io.fits.ImageHDU(data=cutout_sci.data, header=hdr)
+        if W:
+            hdu_wgt = astropy.io.fits.ImageHDU(data=cutout_wgt.data, header=hdr)
+    hdul.append(hdu_sci)
+    hdul.append(hdu_wgt)
+    hdul.writeto(fitsfile, overwrite=overwrite)
+    del data_sci
+    del data_wgt
+    del hdr_sci
+    del hdr_wgt
+    del hdu_sci
+    del hdu_wgt
+
+
+def get_field_bbox(field, wcs, gridsize=100):
+    """
+    Get the image extent and central position in pixels for a given WCS.
+
+    Parameters:
+    - field (str): The name of the field.
+    - wcs: WCS (World Coordinate System) object.
+    - gridsize (int): Number of grid points along each axis.
+
+    Returns:
+    - tuple: (xc, yc, xsize, ysize) where xc, yc are the center coordinates
+      and xsize, ysize are the image sizes in pixels.
+    """
+    deg = core.G3Units.deg
+    (ra, dec) = sources.get_field_extent(field,
+                                         ra_pad=1.5*deg,
+                                         dec_pad=3*deg,
+                                         sky_pad=True)
+    # we convert back from G3units to degrees
+    ra = (ra[0]/deg, ra[1]/deg)
+    dec = (dec[0]/deg, dec[1]/deg)
+    # Get the new ras corners in and see if we cross RA=0
+    crossRA0, ra = crossRAzero(ra)
+    # Create a grid of ra, dec to estimate the projected extent
+    # for the frame WCS
+    ras = np.linspace(ra[0], ra[1], gridsize)
+    decs = np.linspace(dec[0], dec[1], gridsize)
+    ra_grid, dec_grid = np.meshgrid(ras, decs)
+    # Transform ra, dec grid to image positions using astropy
+    (x_grid, y_grid) = wcs.wcs_world2pix(ra_grid, dec_grid, 0)
+    # Get min, max values for x,y grid
+    xmin = math.floor(x_grid.min())
+    xmax = math.ceil(x_grid.max())
+    ymin = math.floor(y_grid.min())
+    ymax = math.ceil(y_grid.max())
+    # Get the size in pixels rounded to the nearest hundred
+    xsize = round((xmax - xmin), -2)
+    ysize = round((ymax - ymin), -2)
+    xc = round((xmax+xmin)/2.)
+    yc = round((ymax+ymin)/2.)
+    logger.debug(f"Found center: ({xc}, {yc})")
+    logger.debug(f"Found size: ({xsize}, {ysize})")
+    return xc, yc, xsize, ysize
