@@ -149,7 +149,6 @@ class g3worker():
             g3file = self.stage_g3file(g3file)
 
         self.g3_to_fits(g3file)
-        exit()
         if self.config.filter_transient:
             self.g3_transient_filter(g3file)
 
@@ -210,13 +209,6 @@ class g3worker():
                                self.folder_date[g3file],
                                f"{self.basename[g3file]}_{suffix}.{ext}")
         return outname
-
-#    def get_fitsname(self, g3file, suffix=''):
-#        "Set the name for the output fitsfile"
-#        fitsfile = os.path.join(self.config.outdir,
-#                                self.folder_date[g3file],
-#                                f"{self.basename[g3file]}_{suffix}.fits")
-#        return fitsfile
 
     def setup_logging(self):
         """ Simple logger that uses configure_logger() """
@@ -314,7 +306,8 @@ class g3worker():
 
         # Skip if fitsfile exists and overwrite/clobber not True
         # Note that if skip is False we proceed, and therefore will overwrite
-        # the fitsfile. That why we set overwrite=True in save_skymap_fits()
+        # the fitsfile. That why we set overwrite=True in the save_skymap_fits
+        # functions
         if self.skip_filename(fitsfile):
             self.logger.warning(f"File already exists, skipping: {fitsfile}")
             return
@@ -325,12 +318,13 @@ class g3worker():
         hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
         hdr['FILETYPE'] = ('passthrough', 'The file type')
         hdr['PARENT'] = (os.path.basename(g3file), 'Name of parent file')
-
-        # Second loop to write FITS
+        # Get the metadata/hdr into an astropy Header object
+        hdr = metadata_to_astropy_header(hdr)
+        # Prepare to write FITS
         g3 = core.G3File(g3file)
         self.logger.info(f"Loading: {g3file} for g3_to_fits()")
 
-        # Make sure that the folder exists: n
+        # Make sure that the folder exists:
         create_dir(os.path.dirname(fitsfile))
 
         # Change the path of the fitsfile is indirect_write
@@ -339,15 +333,14 @@ class g3worker():
             fitsfile_keep = fitsfile
             tmp_dir = mkdtemp(prefix=self.config.indirect_write_prefix)
             fitsfile = os.path.join(tmp_dir, os.path.basename(fitsfile_keep))
-            self.logger.info(f"Will use indirect_write to {fitsfile}")
+            self.logger.info(f"Will use indirect_write to: {fitsfile}")
             # Make sure that the folder exists:
             create_dir(os.path.dirname(fitsfile))
 
         for frame in g3:
             # Convert to FITS
             if frame.type == core.G3FrameType.Map:
-                self.logger.info(f"Transforming to FITS: {frame.type} -- Id: {frame['Id']}")
-
+                self.logger.info(f"Transforming to FITS: {frame.type} -- band: {hdr['BAND']}")
                 self.logger.debug("Removing weights")
                 maps.RemoveWeights(frame, zero_nans=True)
                 maps.MakeMapsUnpolarized(frame)
@@ -356,7 +349,6 @@ class g3worker():
                 hdr['UNITS'] = (units, f"Data units {units_name}")
                 self.logger.debug(f"Removing G3 units --> {units_name}")
                 remove_g3_units(frame, units=core.G3Units.mK)
-
                 # In case we have many bands per g3 file
                 band = frame['Id']
                 # We need to add band to the filename, so we have different
@@ -367,7 +359,7 @@ class g3worker():
                     self.logger.info(f"Adding {band} to output file: {fitsfile}")
 
                 if trim:
-                    field = hdr['FIELD'][0]
+                    field = hdr['FIELD']
                     self.logger.info(f"Will write trimmed FITS file for field: {field}")
                     save_skymap_fits_trim(frame, fitsfile, field,
                                           hdr=hdr,
@@ -407,7 +399,7 @@ class g3worker():
 
         return
 
-    def g3_transient_filter(self, g3file, subtract_coadd=False):
+    def g3_transient_filter(self, g3file, trim=True, subtract_coadd=False):
         """
         Perform Transient filer on a g3file and write result as G3/FITS
         """
@@ -415,12 +407,97 @@ class g3worker():
         # Pre-cook the g3file
         self.precook_g3file(g3file)
 
+        # Create tmp folder and dict with names to keepmif indirect_write
+        if self.config.indirect_write:
+            outname_keep = {}  # dict to keep the actual output names
+            tmp_dir = mkdtemp(prefix=self.config.indirect_write_prefix)
+
+        # Define output names
         suffix = FILETYPE_SUFFIX['filtered']
         outname = {}
-        for filetype in self.config.filetypes:
-            outname[filetype] = self.set_outname(g3file, suffix=suffix, filetype=filetype)
+        skipfile = {}
+        for ft in self.config.output_filetypes:
+            outname[ft] = self.set_outname(g3file, suffix=suffix, filetype=ft)
+            skipfile[ft] = self.skip_filename(outname[ft])
+            # Make sure that the folder exists:
+            create_dir(os.path.dirname(outname[ft]))
+            # Change the path of the output files if indirect_write
+            if self.config.indirect_write:
+                outname_keep[ft] = outname[ft]
+                outname[ft] = os.path.join(tmp_dir, os.path.basename(outname_keep[ft]))
+                self.logger.info(f"Will use indirect_write to: {outname[ft]}")
+                # Make sure that the folder exists:
+                create_dir(os.path.dirname(outname[ft]))
 
-        print(outname)
+        # Make a copy of the header to modify
+        hdr = copy.deepcopy(self.hdr[g3file])
+        # Populate additional metadata for DB
+        if 'FITS' in self.config.output_filetypes:
+            hdr['FITSNAME'] = (os.path.basename(outname['FITS']), 'Name of fits file')
+        hdr['FILETYPE'] = ('filtered', 'The file type')
+        hdr['PARENT'] = (os.path.basename(g3file), 'Name of parent file')
+        # The UNITS
+        hdr['BUNIT'] = ('mJy', 'Flux is in [mJy]')
+        # Get the metadata/hdr into an astropy Header object
+        hdr = metadata_to_astropy_header(hdr)
+
+        # Construct the map_id
+        band = hdr['BAND']
+        map_id = 'Coadd'+band
+        # Create a pipe
+        self.logger.info(f"Loading pipe for {g3file} band: {band}")
+        pipe = core.G3Pipeline()
+
+        pipe.Add(core.G3Reader, filename=g3file)
+        if self.config.coadd is not None:
+            # Match the band of the coadd
+            self.logger.info(f"Adding InjectMaps for {map_id}")
+            pipe.Add(maps.InjectMaps,
+                     map_id=map_id,
+                     maps_in=self.g3coadds[map_id],
+                     ignore_missing_weights=True)
+
+        if not self.config.polarized:
+            pipe.Add(maps.map_modules.MakeMapsUnpolarized)
+
+        # Add the TransientMapFiltering to the pipe
+        self.logger.info(f"Adding TransientMapFiltering for {band}")
+        pipe.Add(transients.TransientMapFiltering,
+                 bands=self.config.band,  # or just band
+                 subtract_coadd=subtract_coadd,
+                 field=self.field_season[g3file],
+                 compute_snr_annulus=False)
+
+        if 'G3' in self.config.output_filetypes:
+            self.logger.info(f"Preparing to write G3: {outname['G3']}")
+            pipe.Add(core.G3Writer, filename=outname['G3'])
+
+        if 'FITS' in self.config.output_filetypes:
+            self.logger.info(f"Preparing to write FITS: {outname['FITS']}")
+            pipe.Add(maps.RemoveWeights, zero_nans=True)
+            pipe.Add(remove_g3_units, units=core.G3Units.mJy)
+            # pipe.Add(maps.fitsio.SaveMapFrame, output_file=outname['FITS'],
+            #         compress='GZIP_2', overwrite=True, hdr=hdr)
+            if trim:
+                field = hdr['FIELD']
+                self.logger.info(f"Will write trimmed FITS file for field: {field}")
+                pipe.Add(save_skymap_fits_trim, outname['FITS'], field,
+                         hdr=hdr,
+                         compress=self.config.compress,
+                         overwrite=True)
+
+        self.logger.info("Executing .Run()")
+        pipe.Run(profile=True)
+        del pipe
+
+        # And now we write back fits file to the orginal location
+        if self.config.indirect_write:
+            for ft in self.config.output_filetypes:
+                self.logger.info(f"Moving {outname[ft]} --> {outname_keep[ft]}")
+                shutil.move(outname[ft], outname_keep[ft])
+                outname[ft] = outname_keep[ft]
+                self.logger.info(f"Created file: {outname[ft]}")
+
         self.logger.info(f"Total time: {elapsed_time(t0)} for Filtering: {g3file}")
         return
 
@@ -479,7 +556,7 @@ class g3worker():
 
         # We want the unweighted maps
         pipe.Add(maps.RemoveWeights, zero_nans=True)
-        pipe.Add(remove_units, units=core.G3Units.mJy)
+        pipe.Add(remove_g3_units, units=core.G3Units.mJy)
         # Write as FITS file
         self.logger.info(f"Adding SaveMapFrame for: {fitsfile}")
         # Make sure that the folder exists:
@@ -491,7 +568,7 @@ class g3worker():
             fitsfile_keep = fitsfile
             tmp_dir = mkdtemp(prefix=self.config.indirect_write_prefix)
             fitsfile = os.path.join(tmp_dir, os.path.basename(fitsfile_keep))
-            self.logger.info(f"Will use indirect_write to {fitsfile}")
+            self.logger.info(f"Will use indirect_write to: {fitsfile}")
             # Make sure that the folder exists:
             create_dir(os.path.dirname(fitsfile))
 
@@ -924,8 +1001,9 @@ def crossRAzero(ras):
     return CROSSRA0, ras
 
 
-def save_skymap_fits_trim(frame, fitsfile, field, hdr=None, compress=False,
-                          overwrite=True):
+def save_skymap_fits_trim(frame, fitsfile, field, hdr=None,
+                          compress=False, overwrite=True):
+
     """
     Save a trimmed version of the sky map to a FITS file.
 
@@ -938,7 +1016,8 @@ def save_skymap_fits_trim(frame, fitsfile, field, hdr=None, compress=False,
     - overwrite (bool): If True, overwrites the existing FITS file.
     """
     if frame.type != core.G3FrameType.Map:
-        raise TypeError(f"Input map: {frame.type} must be a FlatSkyMap or HealpixSkyMap")
+        logger.warning(f"Ignoring frame: {frame.type} -- input must be a FlatSkyMap or HealpixSkyMap")
+        return frame
 
     ctype = None
     if compress is True:
@@ -1039,3 +1118,38 @@ def get_field_bbox(field, wcs, gridsize=100):
     logger.debug(f"Found center: ({xc}, {yc})")
     logger.debug(f"Found size: ({xsize}, {ysize})")
     return xc, yc, xsize, ysize
+
+
+def metadata_to_astropy_header(metadata):
+    """
+    Convert a dictionary of FITS metadata into an astropy.io.fits.Header object.
+
+    Parameters
+    ----------
+    metadata : dict
+        A dictionary where each key is a FITS header keyword (str), and each value
+        is a tuple of the form (value, comment), where:
+        - value : any
+            The value to assign to the FITS header keyword.
+        - comment : str
+            A comment describing the keyword.
+
+    Returns
+    -------
+    header : astropy.io.fits.Header
+        An Astropy Header object populated with the given keywords, values, and comments.
+
+    Examples
+    --------
+    >>> metadata = {
+    ...     'OBJECT': ('M51', 'Target name'),
+    ...     'EXPTIME': (1200.0, 'Exposure time in seconds')
+    ... }
+    >>> header = metadata_to_astropy_header(metadata)
+    >>> print(header['OBJECT'])
+    'M51'
+    """
+    header = astropy.io.fits.Header()
+    for key, value in metadata.items():
+        header[key] = (value[0], value[1])
+    return header

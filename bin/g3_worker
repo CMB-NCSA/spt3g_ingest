@@ -54,7 +54,8 @@ def cmdline():
     parser.add_argument("--indirect_write_path", action='store', default=None,
                         help="Path for indirect write.")
     parser.add_argument("--output_filetypes", nargs='+', default=['FITS'],
-                        help="Output filetype [G3, FITS]")
+                        choices=["G3", "G3GZ", "FITS"],
+                        help="Output filetype [G3, G3GZ, FITS]")
     # Logging options (loglevel/log_format/log_format_date)
     default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
     default_log_format_date = '%Y-%m-%d %H:%M:%S'
