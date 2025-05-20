@@ -63,6 +63,9 @@ class g3worker():
         if self.config.coadd is not None:
             self.load_coadds()
             self.logger.info(f"Coadd keys:{self.g3coadds.keys()}")
+            self.subtract_coadd = True
+        else:
+            self.subtract_coadd = False
 
     def check_input_files(self):
         " Check if the inputs are a list or a file with a list"
@@ -245,11 +248,11 @@ class g3worker():
         for filename in self.config.coadd:
             if self.NP >= self.Ncoadds and self.NP > 1:
                 ar = (filename, return_dict)
-                p[filename] = mp.Process(target=self.load_single_coadd, args=ar)
+                p[filename] = mp.Process(target=self.load_coadd_file, args=ar)
                 self.logger.info(f"Starting job: {p[filename].name}")
                 p[filename].start()
             else:
-                res = self.load_single_coadd(filename, return_dict)
+                res = self.load_coadd_file(filename, return_dict)
                 self.g3coadds.update(res)
 
         # Make sure all process are closed before proceeding
@@ -260,11 +263,14 @@ class g3worker():
             # Update with returned dictionary
             self.g3coadds = return_dict
 
-        self.subtract_coadd = True
+        # Check we have same number of coadds and bands
+        if len(self.g3coadds) != len(self.config.band):
+            raise RuntimeError("Missing coadd frame(s)")
+
         self.logger.info(f"Total time coadd read: {elapsed_time(t0)}")
         return
 
-    def load_single_coadd(self, g3coaddfile, g3coadds):
+    def load_coadd_file(self, g3coaddfile, g3coadds):
         """Load a single coadd file"""
 
         self.logger.info(f"Reading coadd file(s): {g3coaddfile}")
@@ -272,23 +278,29 @@ class g3worker():
         if g3coadds is None:
             g3coadds = {}
 
+        hdr = pre_populate_metadata()
+        hdr['PARENT'] = (os.path.basename(g3coaddfile), 'Name of parent file')
+
         # Loop over frames
         for frame in core.G3File(g3coaddfile):
             self.logger.debug(f"Reading frame: {frame}")
+
             if frame.type != core.G3FrameType.Map:
                 continue
             if frame["Id"] not in self.config.band:
+                self.logger.warning(f"Ignoring frame: {frame['Id']} not in {self.config.band}")
                 continue
             if not self.config.polarized:
                 maps.map_modules.MakeMapsUnpolarized(frame)
             maps.map_modules.RemoveWeights(frame, zero_nans=True)
-            del frame["Wunpol"]
+            del frame["Wunpol"], frame["Wpol"]
             tmap = frame.pop("T")
-            # apply mask
-            if self.config.mask is not None:
-                tmap *= self.g3mask
             tmap.compact(zero_nans=True)
             g3coadds["Coadd{}".format(frame["Id"])] = {"T": tmap}
+            if self.config.polarized:
+                for p in "QU":
+                    pmap = frame.pop(p)
+                    g3coadds["Coadd{}".format(frame["Id"])][p] = pmap
 
         return g3coadds
 
@@ -310,6 +322,10 @@ class g3worker():
         # functions
         if self.skip_filename(fitsfile):
             self.logger.warning(f"File already exists, skipping: {fitsfile}")
+            return
+
+        if self.hdr[g3file]['BAND'][0] not in self.config.band:
+            self.logger.warning(f"Skipping: {g3file} not in selected bands")
             return
 
         # Make a copy of the header to modify
@@ -401,7 +417,7 @@ class g3worker():
 
     def g3_transient_filter(self, g3file, trim=True, subtract_coadd=False):
         """
-        Perform Transient filer on a g3file and write result as G3/FITS
+        Perform Transient filer on a g3file and write result as G3/FITS file
         """
         t0 = time.time()
         # Pre-cook the g3file
@@ -466,7 +482,7 @@ class g3worker():
                  bands=self.config.band,  # or just band
                  subtract_coadd=subtract_coadd,
                  field=self.field_season[g3file],
-                 compute_snr_annulus=False)
+                 compute_snr_annulus=self.config.compute_snr_annulus)
 
         if 'G3' in self.config.output_filetypes:
             self.logger.info(f"Preparing to write G3: {outname['G3']}")
@@ -481,7 +497,9 @@ class g3worker():
             if trim:
                 field = hdr['FIELD']
                 self.logger.info(f"Will write trimmed FITS file for field: {field}")
-                pipe.Add(save_skymap_fits_trim, outname['FITS'], field,
+                pipe.Add(save_skymap_fits_trim,
+                         fitsfile=outname['FITS'],
+                         field=field,
                          hdr=hdr,
                          compress=self.config.compress,
                          overwrite=True)
@@ -1016,7 +1034,11 @@ def save_skymap_fits_trim(frame, fitsfile, field, hdr=None,
     - overwrite (bool): If True, overwrites the existing FITS file.
     """
     if frame.type != core.G3FrameType.Map:
-        logger.warning(f"Ignoring frame: {frame.type} -- input must be a FlatSkyMap or HealpixSkyMap")
+        logger.debug(f"Ignoring frame: {frame.type} -- not a FlatSkyMap or HealpixSkyMap")
+        return frame
+
+    if 'Coadd' in frame['Id']:
+        logger.debug(f"Ignoring frame: {frame['Id']} -- is a Coadd frame")
         return frame
 
     ctype = None
@@ -1038,7 +1060,8 @@ def save_skymap_fits_trim(frame, fitsfile, field, hdr=None,
     xc, yc, xsize, ysize = get_field_bbox(field, T.wcs)
     # Trim sci and wgt image using astropy cutour2D
     cutout_sci = Cutout2D(data_sci, (xc, yc), (ysize, xsize), wcs=T.wcs)
-    cutout_wgt = Cutout2D(data_wgt, (xc, yc), (ysize, xsize), wcs=T.wcs)
+    if W is not None:
+        cutout_wgt = Cutout2D(data_wgt, (xc, yc), (ysize, xsize), wcs=T.wcs)
     if hdr is None:
         hdr = maps.fitsio.create_wcs_header(T)
     hdr.update(cutout_sci.wcs.to_header())
@@ -1065,14 +1088,16 @@ def save_skymap_fits_trim(frame, fitsfile, field, hdr=None,
         if W:
             hdu_wgt = astropy.io.fits.ImageHDU(data=cutout_wgt.data, header=hdr)
     hdul.append(hdu_sci)
-    hdul.append(hdu_wgt)
+    if W:
+        hdul.append(hdu_wgt)
     hdul.writeto(fitsfile, overwrite=overwrite)
     del data_sci
-    del data_wgt
     del hdr_sci
-    del hdr_wgt
     del hdu_sci
-    del hdu_wgt
+    if W:
+        del data_wgt
+        del hdr_wgt
+        del hdu_wgt
 
 
 def get_field_bbox(field, wcs, gridsize=100):

@@ -9,6 +9,7 @@ from spt3g_ingest import ingstools
 
 def cmdline():
 
+    all_bands = ["90GHz", "150GHz", "220GHz"]
     parser = argparse.ArgumentParser(description="spt3g ingestion tool")
     parser.add_argument("files", nargs='+',
                         help="Filename(s) to ingest")
@@ -23,11 +24,17 @@ def cmdline():
     parser.add_argument("--filter_transient", action='store_true', default=False,
                         help="Filter daily maps for transients")
     parser.add_argument("--coadd", nargs="*", default=None,
-                        help="Name of the coadd filenames (g3)")
-    parser.add_argument("--band", nargs="*", default=['90GHz', '150GHz', '220GHz'],
+                        help="Input coadd map filename(s). This coadd(s) will be \
+                              subtracted from the input map(s)")
+    parser.add_argument("--band", nargs="+", default=all_bands, choices=all_bands,
                         help="The bands to select from: 90GHz, 150GHz and 220GHz")
     parser.add_argument("--polarized", action="store_true", default=False,
                         help="Filter polarized maps.")
+    parser.add_argument("--compute_snr_annulus", action="store_true", default=False,
+                        help="Compute signal to noise maps. The noise is determined from the RMS of "
+                        "an annulus around each pixel. The SNR map is then saved to each map frame.")
+    parser.add_argument("--mask", action="store_true", default=False,
+                        help="Mask sources before filtering")
 
     # Custom field Name
     parser.add_argument("--field_name", type=str, default=None,
@@ -82,7 +89,8 @@ def cmdline():
     if args.filter_transient:
         # Check that coadds has same number as bands
         if args.coadd is not None and len(args.coadd) != len(args.band):
-            raise RuntimeError("Missing coadd (g3) files")
+            msg = f"Mismatch number of coadd (g3) files[{len(args.coadd)}] vs bands[{len(args.band)}]"
+            raise RuntimeError(msg)
 
     # Check environmental variables for indirect_write
     if args.indirect_write_path is None and args.indirect_write is True:
