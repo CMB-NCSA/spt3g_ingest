@@ -168,6 +168,8 @@ class g3worker():
         self.hdr = {}
         self.basename = {}
         self.folder_date = {}
+        self.folder_year = {}
+        self.field_name = {}
         self.precooked = {}
         self.field_season = {}
 
@@ -201,6 +203,8 @@ class g3worker():
             self.logger.info(f"Updated metadata for FIELD with: {self.config.field_name}")
 
         self.folder_date[g3file] = get_folder_date(self.hdr[g3file])
+        self.folder_year[g3file] = get_folder_year(self.hdr[g3file])
+        self.field_name[g3file] = self.hdr[g3file]['FIELD'][0]
         self.precooked[g3file] = True
         if self.config.filter_transient:
             self.field_season[g3file] = get_field_season(self.hdr[g3file])
@@ -209,6 +213,8 @@ class g3worker():
         "Set the name for the output filename"
         ext = FILETYPE_EXT[filetype]
         outname = os.path.join(self.config.outdir,
+                               self.folder_year[g3file],
+                               self.field_name[g3file],
                                self.folder_date[g3file],
                                f"{self.basename[g3file]}_{suffix}.{ext}")
         return outname
@@ -369,9 +375,9 @@ class g3worker():
                 band = frame['Id']
                 # We need to add band to the filename, so we have different
                 # outputs
-                basename = fitsfile.split(".")[0]
-                if band not in basename:
-                    fitsfile = f"{basename}_{band}.fits"
+                basename = self.basename[g3file]
+                if band not in self.basename[g3file]:
+                    fitsfile = f"{self.basename[g3file]}_{band}.fits"
                     self.logger.info(f"Adding {band} to output file: {fitsfile}")
 
                 if trim:
@@ -820,6 +826,17 @@ def get_folder_date(hdr):
     except ValueError:
         folder_date = hdr['DATE-BEG'][0]
     return folder_date
+
+
+def get_folder_year(hdr):
+    """
+    Extract the folder year based on the observation date
+    """
+    try:
+        folder_year = Time(hdr['DATE-BEG'][0]).strftime("%Y")
+    except ValueError:
+        folder_year = hdr['DATE-BEG'][0][0:4]
+    return folder_year
 
 
 def get_g3basename(g3file):
