@@ -10,7 +10,7 @@ from spt3g_ingest import ingstools
 def cmdline():
 
     all_bands = ["90GHz", "150GHz", "220GHz"]
-    parser = argparse.ArgumentParser(description="spt3g ingestion tool")
+    parser = argparse.ArgumentParser(description="spt3g filtering and ingestion tool")
     parser.add_argument("files", nargs='+',
                         help="Filename(s) to ingest")
     parser.add_argument("--outdir", type=str, action='store', default=None,

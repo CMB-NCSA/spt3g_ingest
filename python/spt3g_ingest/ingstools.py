@@ -27,8 +27,9 @@ from astropy.nddata import Cutout2D
 FILETYPE_SUFFIX = {'filtered': 'fltd', 'passthrough': 'psth'}
 FILETYPE_EXT = {'FITS': 'fits', 'G3': 'g3', 'G3GZ': 'g3.gz'}
 
-
+# Logger
 LOGGER = logging.getLogger(__name__)
+LOGGER.propagate = False
 logger = LOGGER
 
 # Mapping of metadata to FITS keywords
@@ -51,6 +52,7 @@ class g3worker():
         self.config = types.SimpleNamespace(**keys)
 
         # Start Logging
+        self.logger = LOGGER
         self.setup_logging()
 
         # Prepare vars
@@ -85,6 +87,7 @@ class g3worker():
     def run_files(self):
         " Run all g3files"
         if self.NP > 1:
+            self.setup_logging()
             self.run_mp()
         else:
             self.run_serial()
@@ -220,13 +223,22 @@ class g3worker():
         return outname
 
     def setup_logging(self):
-        """ Simple logger that uses configure_logger() """
+        """
+        Sets up the logging configuration using `create_logger` and logs key info.
+        Configures logging level, format, and other related settings based on the
+        configuration object. Logs the start of logging and the version of the
+        `mmblink` package.
+
+        Raises:
+        - ValueError: If the logger configuration is invalid or incomplete.
+        """
 
         # Create the logger
-        create_logger(level=self.config.loglevel,
+        if self.logger is None:
+            self.logger = logging.getLogger(__name__)
+        create_logger(logger=self.logger, level=self.config.loglevel,
                       log_format=self.config.log_format,
                       log_format_date=self.config.log_format_date)
-        self.logger = logging.getLogger(__name__)
         self.logger.info(f"Logging Started at level:{self.config.loglevel}")
         self.logger.info(f"Running spt3g_ingest version: {spt3g_ingest.__version__}")
 
@@ -279,6 +291,9 @@ class g3worker():
     def load_coadd_file(self, g3coaddfile, g3coadds):
         """Load a single coadd file"""
 
+        if self.NP > 1:
+            self.setup_logging()
+
         self.logger.info(f"Reading coadd file(s): {g3coaddfile}")
 
         if g3coadds is None:
@@ -312,6 +327,9 @@ class g3worker():
 
     def g3_to_fits(self, g3file, overwrite=False, fitsfile=None, trim=True):
         """ Dump g3file as fits"""
+
+        if self.NP > 1:
+            self.setup_logging()
 
         t0 = time.time()
         # Pre-cook the g3file
@@ -375,7 +393,6 @@ class g3worker():
                 band = frame['Id']
                 # We need to add band to the filename, so we have different
                 # outputs
-                basename = self.basename[g3file]
                 if band not in self.basename[g3file]:
                     fitsfile = f"{self.basename[g3file]}_{band}.fits"
                     self.logger.info(f"Adding {band} to output file: {fitsfile}")
@@ -421,10 +438,12 @@ class g3worker():
 
         return
 
-    def g3_transient_filter(self, g3file, trim=True, subtract_coadd=False):
+    def g3_transient_filter(self, g3file, trim=True):
         """
         Perform Transient filer on a g3file and write result as G3/FITS file
         """
+        if self.NP > 1:
+            self.setup_logging()
         t0 = time.time()
         # Pre-cook the g3file
         self.precook_g3file(g3file)
@@ -465,7 +484,7 @@ class g3worker():
 
         # Construct the map_id
         band = hdr['BAND']
-        map_id = 'Coadd'+band
+        coaddId = 'Coadd'+band
         # Create a pipe
         self.logger.info(f"Loading pipe for {g3file} band: {band}")
         pipe = core.G3Pipeline()
@@ -473,10 +492,10 @@ class g3worker():
         pipe.Add(core.G3Reader, filename=g3file)
         if self.config.coadd is not None:
             # Match the band of the coadd
-            self.logger.info(f"Adding InjectMaps for {map_id}")
+            self.logger.info(f"Adding InjectMaps for {coaddId}")
             pipe.Add(maps.InjectMaps,
-                     map_id=map_id,
-                     maps_in=self.g3coadds[map_id],
+                     map_id=coaddId,
+                     maps_in=self.g3coadds[coaddId],
                      ignore_missing_weights=True)
 
         if not self.config.polarized:
@@ -486,7 +505,7 @@ class g3worker():
         self.logger.info(f"Adding TransientMapFiltering for {band}")
         pipe.Add(transients.TransientMapFiltering,
                  bands=self.config.band,  # or just band
-                 subtract_coadd=subtract_coadd,
+                 subtract_coadd=self.subtract_coadd,
                  field=self.field_season[g3file],
                  compute_snr_annulus=self.config.compute_snr_annulus)
 
@@ -525,104 +544,10 @@ class g3worker():
         self.logger.info(f"Total time: {elapsed_time(t0)} for Filtering: {g3file}")
         return
 
-    def g3_to_fits_filtd(self, g3file, fitsfile=None, subtract_coadd=False):
-        """Filter a g3file and write result as fits"""
-
-        t0 = time.time()
-        # Pre-cook the g3file
-        self.precook_g3file(g3file)
-
-        # Define fitsfile name only if undefined
-        if fitsfile is None:
-            ext = FILETYPE_SUFFIX['filtered']
-            fitsfile = self.get_fitsname(g3file, f'_{ext}')
-
-        # Skip if fitsfile exists and overwrite/clobber not True
-        # Note that if skip is False we proceed, and therefore will overwrite
-        # the fitsfile. That why we set overwrite=True in save_skymap_fits()
-        if self.skip_fitsfile(fitsfile):
-            self.logger.warning(f"File exists, skipping: {fitsfile}")
-            return
-
-        # Make a copy of the header to modify
-        hdr = copy.deepcopy(self.hdr[g3file])
-        # Populate additional metadata for DB
-        hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
-        hdr['FILETYPE'] = ('filtered', 'The file type')
-
-        # The UNITS
-        hdr['BUNIT'] = ('mJy', 'Flux is in [mJy]')
-
-        # Construct the map_id
-        band = hdr['BAND'][0]
-        map_id = 'Coadd'+band
-
-        # Create a pipe
-        self.logger.info(f"Filtering {g3file} band: {band}")
-        pipe = core.G3Pipeline()
-        pipe.Add(core.G3Reader, filename=g3file)
-
-        if self.config.coadd is not None:
-            # Match the band of the coadd
-            self.logger.info(f"Adding InjectMaps for {map_id}")
-            pipe.Add(maps.InjectMaps, map_id=map_id,
-                     maps_in=self.g3coadds[map_id], ignore_missing_weights=True)
-
-        if not self.config.polarized:
-            pipe.Add(maps.map_modules.MakeMapsUnpolarized)
-
-        # Add the TransientMapFiltering to the pipe
-        self.logger.info(f"Adding TransientMapFiltering for {band}")
-        pipe.Add(transients.TransientMapFiltering,
-                 bands=self.config.band,  # or just band
-                 subtract_coadd=subtract_coadd,
-                 field=self.field_season[g3file])
-
-        # We want the unweighted maps
-        pipe.Add(maps.RemoveWeights, zero_nans=True)
-        pipe.Add(remove_g3_units, units=core.G3Units.mJy)
-        # Write as FITS file
-        self.logger.info(f"Adding SaveMapFrame for: {fitsfile}")
-        # Make sure that the folder exists:
-        create_dir(os.path.dirname(fitsfile))
-
-        # Change the path of the fitsfile is indirect_write
-        if self.config.indirect_write:
-            # Keep the orginal name
-            fitsfile_keep = fitsfile
-            tmp_dir = mkdtemp(prefix=self.config.indirect_write_prefix)
-            fitsfile = os.path.join(tmp_dir, os.path.basename(fitsfile_keep))
-            self.logger.info(f"Will use indirect_write to: {fitsfile}")
-            # Make sure that the folder exists:
-            create_dir(os.path.dirname(fitsfile))
-
-        pipe.Add(maps.fitsio.SaveMapFrame,
-                 output_file=fitsfile,
-                 compress=self.config.compress,
-                 overwrite=True, hdr=hdr)
-        self.logger.info(f"Will create fitsfile: {fitsfile}")
-        self.logger.info("Running Filtering pipe")
-        pipe.Run(profile=False)
-        del pipe
-        self.logger.info(f"Created: {fitsfile}")
-        self.logger.info(f"Total time: {elapsed_time(t0)} for Filtering: {g3file}")
-
-        # And now we write back fits file to the orginal location
-        if self.config.indirect_write:
-            self.logger.info(f"Moving {fitsfile} --> {fitsfile_keep}")
-            shutil.move(fitsfile, fitsfile_keep)
-
-            fitsfile = fitsfile_keep
-
-        self.logger.info(f"Total FITS creation time: {elapsed_time(t0)}")
-
-        if self.config.ingest:
-            sqltools.ingest_fitsfile(fitsfile, self.config.tablename,
-                                     dbname=self.config.dbname,
-                                     replace=self.config.replace)
-        return
-
     def skip_g3file(self, g3file, size=50):
+        """
+        Function to skip rogue/junk g3 files that should no be processed
+        """
         file_size = os.path.getsize(g3file)/1024**2
         if file_size < size:
             skip = True
@@ -850,7 +775,17 @@ def get_g3basename(g3file):
 
 def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None, log_format_date=None):
     """
-    Configure an existing logger
+    Configure an existing logger with specified settings. Sets the format,
+    logging level, and handlers for the given logger. If a logfile is provided,
+    logs are written to both the console and the file with rotation. If no log
+    format or date format is provided, default values are used.
+
+    Parameters:
+    - logger (logging.Logger): The logger to configure.
+    - logfile (str, optional): Path to the log file. If `None`, logs to the console.
+    - level (int): Logging level (e.g., `logging.INFO`, `logging.DEBUG`).
+    - log_format (str, optional): Log message format (default is detailed format with function name).
+    - log_format_date (str, optional): Date format for logs (default is `'%Y-%m-%d %H:%M:%S'`).
     """
     # Define formats
     if log_format:
@@ -888,15 +823,34 @@ def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None
     return
 
 
-def create_logger(logfile=None, level=logging.NOTSET, log_format=None, log_format_date=None):
+def create_logger(logger=None, logfile=None, level=logging.NOTSET, log_format=None, log_format_date=None):
     """
-    Simple logger that uses configure_logger()
+    Configures and returns a logger with specified settings.
+    Sets up logging based on provided level, format, and output file. Can be
+    used for both `setup_logging` and other components.
+
+    Parameters:
+    - logger (logging.Logger, optional): The logger to configure. If `None`, a new logger
+      is created.
+    - logfile (str, optional): Path to the log file. If `None`, logs to the console.
+    - level (int): Logging level (e.g., `logging.INFO`, `logging.DEBUG`).
+    - log_format (str, optional): Format for log messages (e.g., `'%(asctime)s - %(message)s'`).
+    - log_format_date (str, optional): Date format for logs (e.g., `'%Y-%m-%d %H:%M:%S'`).
+
+    Returns:
+    logging.Logger: The configured logger instance.
+
+    Raises:
+    - ValueError: If the log level or format is invalid.
     """
-    logger = logging.getLogger(__name__)
+
+    if logger is None:
+        logger = logging.getLogger(__name__)
     configure_logger(logger, logfile=logfile, level=level,
                      log_format=log_format, log_format_date=log_format_date)
     logging.basicConfig(handlers=logger.handlers, level=level)
     logger.propagate = False
+    logger.info(f"Logging Started at level:{level}")
     return logger
 
 
