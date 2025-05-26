@@ -51,6 +51,13 @@ class g3worker():
         # Load the configurarion
         self.config = types.SimpleNamespace(**keys)
 
+        # Get the number of processors to use
+        self.NP = get_NP(self.config.np)
+        if self.NP > 1:
+            self.MP = True
+        else:
+            self.MP = False
+
         # Start Logging
         self.logger = LOGGER
         self.setup_logging()
@@ -179,8 +186,6 @@ class g3worker():
         # The number of files to process
         self.nfiles = len(self.config.files)
 
-        # Get the number of processors to use
-        self.NP = get_NP(self.config.np)
 
         # Set the number of threads for numexpr
         self.set_nthreads()
@@ -236,7 +241,8 @@ class g3worker():
         # Create the logger
         if self.logger is None:
             self.logger = logging.getLogger(__name__)
-        create_logger(logger=self.logger, level=self.config.loglevel,
+        create_logger(logger=self.logger, MP=self.MP,
+                      level=self.config.loglevel,
                       log_format=self.config.log_format,
                       log_format_date=self.config.log_format_date)
         self.logger.info(f"Logging Started at level:{self.config.loglevel}")
@@ -773,7 +779,8 @@ def get_g3basename(g3file):
     return os.path.basename(basename)
 
 
-def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None, log_format_date=None):
+def configure_logger(logger, MP=False, logfile=None, level=logging.NOTSET,
+                     log_format=None, log_format_date=None):
     """
     Configure an existing logger with specified settings. Sets the format,
     logging level, and handlers for the given logger. If a logfile is provided,
@@ -796,6 +803,11 @@ def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None
         FORMAT_DATE = log_format_date
     else:
         FORMAT_DATE = '%Y-%m-%d %H:%M:%S'
+
+    # Update logger to see process inforation
+    if MP is True:
+        FORMAT = FORMAT.replace("[%(levelname)s]", "[%(levelname)s-%(processName)s]")
+
     formatter = logging.Formatter(FORMAT, FORMAT_DATE)
 
     # Need to set the root logging level as setting the level for each of the
@@ -823,7 +835,8 @@ def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None
     return
 
 
-def create_logger(logger=None, logfile=None, level=logging.NOTSET, log_format=None, log_format_date=None):
+def create_logger(logger=None, MP=False, logfile=None,
+                  level=logging.NOTSET, log_format=None, log_format_date=None):
     """
     Configures and returns a logger with specified settings.
     Sets up logging based on provided level, format, and output file. Can be
@@ -846,7 +859,7 @@ def create_logger(logger=None, logfile=None, level=logging.NOTSET, log_format=No
 
     if logger is None:
         logger = logging.getLogger(__name__)
-    configure_logger(logger, logfile=logfile, level=level,
+    configure_logger(logger, MP=MP, logfile=logfile, level=level,
                      log_format=log_format, log_format_date=log_format_date)
     logging.basicConfig(handlers=logger.handlers, level=level)
     logger.propagate = False
