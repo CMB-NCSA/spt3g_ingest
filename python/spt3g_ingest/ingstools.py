@@ -94,7 +94,6 @@ class g3worker():
     def run_files(self):
         " Run all g3files"
         if self.NP > 1:
-            self.setup_logging()
             self.run_mp()
         else:
             self.run_serial()
@@ -241,6 +240,11 @@ class g3worker():
         # Create the logger
         if self.logger is None:
             self.logger = logging.getLogger(__name__)
+
+        if self.logger.hasHandlers():
+            self.logger.debug("Logger already has handlers.")
+            return
+
         create_logger(logger=self.logger, MP=self.MP,
                       level=self.config.loglevel,
                       log_format=self.config.log_format,
@@ -285,6 +289,7 @@ class g3worker():
             for filename in p.keys():
                 self.logger.info(f"Joining job: {p[filename].name}")
                 p[filename].join()
+            del p
             # Update with returned dictionary
             self.g3coadds = return_dict
 
@@ -335,8 +340,8 @@ class g3worker():
     def g3_to_fits(self, g3file, overwrite=False, fitsfile=None, trim=True):
         """ Dump g3file as fits"""
 
-        #if self.NP > 1:
-        #    self.setup_logging()
+        if self.NP > 1:
+            self.setup_logging()
 
         t0 = time.time()
         # Pre-cook the g3file
@@ -828,6 +833,9 @@ def configure_logger(logger, MP=False, logfile=None, level=logging.NOTSET,
         logger.addHandler(fh)
 
     # Set the screen handle
+    if logger_has_stdout_handler(logger):
+        print("Skipping adding stdout handler")
+        return
     sh = logging.StreamHandler(sys.stdout)
     sh.setFormatter(formatter)
     sh.setLevel(level)
@@ -866,6 +874,22 @@ def create_logger(logger=None, MP=False, logfile=None,
     logger.propagate = False
     logger.info(f"Logging Created at level:{level}")
     return logger
+
+
+def logger_has_stdout_handler(logger):
+    """
+    Check whether the given logger has a StreamHandler that
+    writes to sys.stdout.
+    Parameters:
+     logger (logging.Logger): The logger instance to inspect.
+    Returns:
+     bool: True if a StreamHandler writing to sys.stdout is found,
+           False otherwise.
+    """
+    for handler in logger.handlers:
+        if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout:
+            return True
+    return False
 
 
 def elapsed_time(t1, verb=False):
