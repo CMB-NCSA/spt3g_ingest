@@ -23,6 +23,8 @@ def cmdline():
     # Filter options
     parser.add_argument("--filter_transient", action='store_true', default=False,
                         help="Filter daily maps for transients")
+    parser.add_argument("--passthrough", action='store_true', default=False,
+                        help="Passthrough maps as FITS")
     parser.add_argument("--coadd", nargs="*", default=None,
                         help="Input coadd map filename(s). This coadd(s) will be \
                               subtracted from the input map(s)")
@@ -38,7 +40,7 @@ def cmdline():
 
     # Custom field Name
     parser.add_argument("--field_name", type=str, default=None,
-                        help="SPT field name (optional) to insert as OBJECT")
+                        help="SPT field name (optional) to overide metadata")
     # Ingest options
     parser.add_argument("--ingest", action='store_true', default=False,
                         help="Ingest files")

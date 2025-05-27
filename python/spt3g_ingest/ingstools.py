@@ -25,7 +25,8 @@ from astropy.nddata import Cutout2D
 
 # The filetype extensions for file types
 FILETYPE_SUFFIX = {'filtered': 'fltd', 'passthrough': 'psth'}
-FILETYPE_EXT = {'FITS': 'fits', 'G3': 'g3', 'G3GZ': 'g3.gz'}
+FILETYPE_EXT = {'FITS': 'fits', 'G3': 'g3.gz'}
+
 
 # Logger
 LOGGER = logging.getLogger(__name__)
@@ -39,6 +40,9 @@ _keywords_map = {'ObservationStart': ('DATE-BEG', 'Observation start date'),
                  'Id': ('BAND', 'Observing Frequency'),
                  'SourceName': ('FIELD', 'Name of Observing Field'),
                  }
+
+# Get the names of all of the SPT fields (so far...)
+_ALL_SPT_FIELDS = sources.get_all_fields()
 
 
 class g3worker():
@@ -107,7 +111,6 @@ class g3worker():
             # Avoid small files that make filtering crash
             if self.skip_g3file(g3file, size=50):
                 continue
-
             self.logger.info(f"Starting mp.Process for {g3file}")
             fargs = (g3file, k)
             p = mp.Process(target=self.run_g3file, args=fargs)
@@ -140,7 +143,6 @@ class g3worker():
         with mp.get_context('spawn').Pool() as p:
             p = mp.Pool(processes=self.NP, maxtasksperchild=1)
             self.logger.info(f"Will use {self.NP} processors to convert and ingest")
-
             k = 1
             for g3file in self.config.files:
                 fargs = (g3file, k)
@@ -160,7 +162,8 @@ class g3worker():
         if self.config.stage:
             g3file = self.stage_g3file(g3file)
 
-        self.g3_to_fits(g3file)
+        if self.config.passthrough:
+            self.g3_to_fits(g3file)
         if self.config.filter_transient:
             self.g3_transient_filter(g3file)
 
@@ -184,7 +187,6 @@ class g3worker():
 
         # The number of files to process
         self.nfiles = len(self.config.files)
-
 
         # Set the number of threads for numexpr
         self.set_nthreads()
@@ -671,6 +673,11 @@ def extract_metadata_frame(frame, metadata=None):
     # For backwards compatibily we add copies for OBS-ID and OBJECT
     metadata['OBS-ID'] = metadata['OBSID']
     metadata['OBJECT'] = metadata['FIELD']
+
+    # Make sure FIELD is a valid SPT field
+    field_name = metadata['FIELD'][0]
+    if field_name not in _ALL_SPT_FIELDS:
+        logger.warning(f"{field_name} not in SPT fields... continuing with trepidation")
     return metadata
 
 
@@ -695,11 +702,9 @@ def get_T_frame_units(frame):
 
 
 def get_metadata(g3file, logger=None):
-
     """
     Extract metadata from g3file and store in header dictionary
     """
-
     t0 = time.time()
     if not logger:
         logger = LOGGER
@@ -734,7 +739,6 @@ def get_field_season(hdr, logger=None):
     """
     Get the field name for the g3file
     """
-
     if not logger:
         logger = LOGGER
 
@@ -948,11 +952,15 @@ def relocate_g3file(g3file, outdir, dryrun=False, manifest=None):
     "Function to relcate a g3 file by date"
     # Get the metadata for folder information
     hdr = digest_g3file(g3file)
+    field_name = hdr['FIELD'][0]
     folder_date = get_folder_date(hdr)
-    dirname = os.path.join(outdir, folder_date)
+    folder_year = get_folder_year(hdr)
+    path = os.path.join(folder_year, field_name, folder_date)
+    dirname = os.path.join(outdir, path)
+
     # We need to tweak the FILEPATH keyword in the header with
     # the final location
-    hdr['FILEPATH'] = (f"raw/{folder_date}", "Folder path based on date-obs")
+    hdr['FILEPATH'] = (f"raw/{path}", "Folder path based on date-obs")
 
     if manifest is not None:
         manifest.write(f"{g3file} {dirname}\n")
@@ -1030,10 +1038,8 @@ def crossRAzero(ras):
 
 def save_skymap_fits_trim(frame, fitsfile, field, hdr=None,
                           compress=False, overwrite=True):
-
     """
     Save a trimmed version of the sky map to a FITS file.
-
     Parameters:
     - frame: A frame object containing the map data.
     - fitsfile (str): The path to the output FITS file.
