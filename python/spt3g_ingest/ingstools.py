@@ -271,6 +271,7 @@ class g3worker():
         # Loop over all coadd files
         for filename in self.config.coadd:
             if self.NP >= self.Ncoadds and self.NP > 1:
+                self.logger.info(f"Starting mp.Process for {filename}")
                 ar = (filename, return_dict)
                 p[filename] = mp.Process(target=self.load_coadd_file, args=ar)
                 self.logger.info(f"Starting job: {p[filename].name}")
@@ -282,7 +283,7 @@ class g3worker():
         # Make sure all process are closed before proceeding
         if self.NP >= self.Ncoadds and self.NP > 1:
             for filename in p.keys():
-                self.logger.info(f"joining job: {p[filename].name}")
+                self.logger.info(f"Joining job: {p[filename].name}")
                 p[filename].join()
             # Update with returned dictionary
             self.g3coadds = return_dict
@@ -334,8 +335,8 @@ class g3worker():
     def g3_to_fits(self, g3file, overwrite=False, fitsfile=None, trim=True):
         """ Dump g3file as fits"""
 
-        if self.NP > 1:
-            self.setup_logging()
+        #if self.NP > 1:
+        #    self.setup_logging()
 
         t0 = time.time()
         # Pre-cook the g3file
@@ -863,7 +864,7 @@ def create_logger(logger=None, MP=False, logfile=None,
                      log_format=log_format, log_format_date=log_format_date)
     logging.basicConfig(handlers=logger.handlers, level=level)
     logger.propagate = False
-    logger.info(f"Logging Started at level:{level}")
+    logger.info(f"Logging Created at level:{level}")
     return logger
 
 
