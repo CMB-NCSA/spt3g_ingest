@@ -673,11 +673,6 @@ def extract_metadata_frame(frame, metadata=None):
     # For backwards compatibily we add copies for OBS-ID and OBJECT
     metadata['OBS-ID'] = metadata['OBSID']
     metadata['OBJECT'] = metadata['FIELD']
-
-    # Make sure FIELD is a valid SPT field
-    field_name = metadata['FIELD'][0]
-    if field_name not in _ALL_SPT_FIELDS:
-        logger.warning(f"{field_name} not in SPT fields... continuing with trepidation")
     return metadata
 
 
@@ -730,6 +725,11 @@ def get_metadata(g3file, logger=None):
                 hdr['DATE-BEG'] = OBSID
                 logger.info(f"Inserting OBS-ID to header: {hdr['OBS-ID']}")
                 logger.info(f"Inserting DATE-BEG to header: {hdr['DATE-BEG']}")
+
+    # Make sure FIELD is a valid SPT field
+    field_name = hdr['FIELD'][0]
+    if field_name not in _ALL_SPT_FIELDS:
+        logger.warning(f"{field_name} not in SPT fields... continuing with trepidation")
 
     logger.info(f"Metadata Extraction time: {elapsed_time(t0)}")
     return hdr
@@ -948,32 +948,42 @@ def chunker(seq, size):
     return (seq[pos:pos + size] for pos in range(0, len(seq), size))
 
 
-def relocate_g3file(g3file, outdir, dryrun=False, manifest=None):
+def relocate_g3file(g3file, outdir, symlink=False, dryrun=False, manifest=None):
     "Function to relcate a g3 file by date"
     # Get the metadata for folder information
     hdr = digest_g3file(g3file)
     field_name = hdr['FIELD'][0]
-    folder_date = get_folder_date(hdr)
     folder_year = get_folder_year(hdr)
-    path = os.path.join(folder_year, field_name, folder_date)
+    # folder_date = get_folder_date(hdr)
+    # path = os.path.join(folder_year, field_name, folder_date)
+    path = os.path.join(folder_year, field_name)
     dirname = os.path.join(outdir, path)
 
     # We need to tweak the FILEPATH keyword in the header with
     # the final location
-    hdr['FILEPATH'] = (f"raw/{path}", "Folder path based on date-obs")
+    hdr['FILEPATH'] = (f"{path}", "Folder path based on date-obs")
 
     if manifest is not None:
         manifest.write(f"{g3file} {dirname}\n")
 
-    if dryrun:
-        LOGGER.info(f"DRYRUN: mv {g3file} {dirname}")
-        return hdr
+    # Make sure that directory exists
+    create_dir(dirname)
 
-    if not os.path.isdir(dirname):
-        LOGGER.info(f"Creating directory {dirname}")
-        os.mkdir(dirname)
-    LOGGER.info(f"Moving {g3file} --> {dirname}")
-    shutil.move(g3file, dirname)
+    if symlink is True:
+        basename = os.path.basename(g3file)
+        dest = os.path.join(dirname, basename)
+        source = os.path.abspath(g3file)
+        LOGGER.info(f"Making symlink: {source} --> {dest}")
+        if dryrun is False:
+            os.symlink(source, dest)
+        else:
+            LOGGER.info(f"DRYRUN: ln -s {source} {dest}")
+    else:
+        LOGGER.info(f"Moving: {g3file} --> {dirname}")
+        if dryrun is False:
+            shutil.move(g3file, dirname)
+        else:
+            LOGGER.info(f"DRYRUN: mv {g3file} {dirname}")
 
     return hdr
 

@@ -198,7 +198,7 @@ def ingest_g3file(header, tablename, dbname=None, replace=False, dryrun=False):
     INGESTION_DATE = Time.now().isot
 
     header['INGESTION_DATE'] = INGESTION_DATE
-    header['FILETYPE'] = 'RAW'
+    header['FILETYPE'] = 'rawmap'
     # Replace '-' with "_"
     header = fix_fits_keywords(header)
 

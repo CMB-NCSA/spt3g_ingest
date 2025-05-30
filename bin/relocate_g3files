@@ -5,6 +5,7 @@ import logging
 import time
 from spt3g_ingest import ingstools
 from spt3g_ingest import sqltools
+from spt3g_ingest import data_types
 
 
 def cmdline():
@@ -16,6 +17,9 @@ def cmdline():
                         required=True, help="Location for output files")
     parser.add_argument("--dryrun", action='store_true', default=False,
                         help="Dry run")
+    parser.add_argument("--symlink", action='store_true', default=False,
+                        help="Create symbolic link instead of move")
+
     # Ingest options
     parser.add_argument("--ingest", action='store_true', default=False,
                         help="Ingest to DB")
@@ -23,7 +27,7 @@ def cmdline():
                         help="Replace ingest entry")
     parser.add_argument("--tablename", action='store', default="g3file_info",
                         help="Table name with file infomation")
-    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_raw.db",
+    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_maps.db",
                         help="Name of the sqlite3 database file")
 
     # Logging options (loglevel/log_format/log_format_date)
@@ -55,12 +59,19 @@ if __name__ == "__main__":
     manifest = open('manifest.txt', 'w')
     logger.info("Will write manifest to: manifest.txt")
 
+    # Make sure that the DB and table exists
+    if args.ingest:
+        sqltools.check_dbtable(args.dbname, args.tablename, con=None, Fd=data_types.g3Fd)
+
     t0 = time.time()
     nfiles = len(args.files)
     k = 1
     for g3file in args.files:
         logger.info(f"Relocating: {k}/{nfiles} files")
-        hdr = ingstools.relocate_g3file(g3file, args.outdir, dryrun=args.dryrun, manifest=manifest)
+        hdr = ingstools.relocate_g3file(g3file, args.outdir,
+                                        symlink=args.symlink,
+                                        dryrun=args.dryrun,
+                                        manifest=manifest)
         if args.ingest:
             sqltools.ingest_g3file(hdr, args.tablename,
                                    dbname=args.dbname,
