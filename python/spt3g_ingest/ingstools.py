@@ -504,7 +504,7 @@ class g3worker():
         pipe = core.G3Pipeline()
 
         pipe.Add(core.G3Reader, filename=g3file)
-        if self.config.coadd is not None:
+        if self.filter_transient_coadd is True:
             # Match the band of the coadd
             self.logger.info(f"Adding InjectMaps for {coaddId}")
             pipe.Add(maps.InjectMaps,
@@ -952,11 +952,12 @@ def relocate_g3file(g3file, outdir, symlink=False, dryrun=False, manifest=None):
     "Function to relcate a g3 file by date"
     # Get the metadata for folder information
     hdr = digest_g3file(g3file)
-    field_name = hdr['FIELD'][0]
+    # field_name = hdr['FIELD'][0]
     folder_year = get_folder_year(hdr)
-    # folder_date = get_folder_date(hdr)
+    folder_date = get_folder_date(hdr)
     # path = os.path.join(folder_year, field_name, folder_date)
-    path = os.path.join(folder_year, field_name)
+    # path = os.path.join(folder_year, field_name)
+    path = os.path.join(folder_year, folder_date)
     dirname = os.path.join(outdir, path)
 
     # We need to tweak the FILEPATH keyword in the header with
@@ -992,6 +993,14 @@ def digest_g3file(g3file):
     "Function to digest a g3 file"
     # Get the metadata for folder information
     hdr = get_metadata(g3file)
+    # Get the field season
+    try:
+        field_season = get_field_season(hdr)
+    except Exception:
+        logger.warning(f"Cannot get field season for file: {g3file}")
+        field_season = ''
+    hdr['SEASON'] = (field_season, "Field Season")
+    # ID and FILENAME
     hdr['ID'] = (os.path.basename(g3file).split('.g3')[0], 'ID')
     hdr['FILENAME'] = (os.path.basename(g3file), 'The Filename')
     # Store the relative filepath, remove basepath from Taiga

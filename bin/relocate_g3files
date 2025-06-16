@@ -27,7 +27,7 @@ def cmdline():
                         help="Replace ingest entry")
     parser.add_argument("--tablename", action='store', default="g3file_info",
                         help="Table name with file infomation")
-    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_maps.db",
+    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_archive.db",
                         help="Name of the sqlite3 database file")
 
     # Logging options (loglevel/log_format/log_format_date)
