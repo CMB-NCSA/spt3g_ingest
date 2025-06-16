@@ -27,6 +27,8 @@ from astropy.nddata import Cutout2D
 FILETYPE_SUFFIX = {'filtered': 'fltd', 'passthrough': 'psth'}
 FILETYPE_EXT = {'FITS': 'fits', 'G3': 'g3.gz'}
 
+# The format for the COADS_ID frame
+COADD_ID = "Coadd_{band}_{season}"
 
 # Logger
 LOGGER = logging.getLogger(__name__)
@@ -72,13 +74,18 @@ class g3worker():
         # Check input files vs file list
         self.check_input_files()
 
-        # Load coadds for transients
-        if self.config.coadd is not None:
-            self.load_coadds()
-            self.logger.info(f"Coadd keys:{self.g3coadds.keys()}")
+        if self.config.filter_transient_coadd:
             self.subtract_coadd = True
         else:
             self.subtract_coadd = False
+
+        # # Load coadds for transients
+        # if self.config.coadd is not None:
+        #    self.load_coadds()
+        #    self.logger.info(f"Coadd keys:{self.g3coadds.keys()}")
+        #    self.subtract_coadd = True
+        # else:
+        #    self.subtract_coadd = False
 
     def check_input_files(self):
         " Check if the inputs are a list or a file with a list"
@@ -184,6 +191,7 @@ class g3worker():
         self.field_name = {}
         self.precooked = {}
         self.field_season = {}
+        self.g3coadds = {}
 
         # The number of files to process
         self.nfiles = len(self.config.files)
@@ -214,16 +222,15 @@ class g3worker():
         self.folder_date[g3file] = get_folder_date(self.hdr[g3file])
         self.folder_year[g3file] = get_folder_year(self.hdr[g3file])
         self.field_name[g3file] = self.hdr[g3file]['FIELD'][0]
+        self.field_season[g3file] = self.hdr[g3file]['SEASON'][0]
         self.precooked[g3file] = True
-        if self.config.filter_transient:
-            self.field_season[g3file] = get_field_season(self.hdr[g3file])
 
     def set_outname(self, g3file, suffix='', filetype='FITS'):
         "Set the name for the output filename"
         ext = FILETYPE_EXT[filetype]
         outname = os.path.join(self.config.outdir,
                                self.folder_year[g3file],
-                               self.field_name[g3file],
+                               # self.field_name[g3file],
                                self.folder_date[g3file],
                                f"{self.basename[g3file]}_{suffix}.{ext}")
         return outname
@@ -302,7 +309,7 @@ class g3worker():
         self.logger.info(f"Total time coadd read: {elapsed_time(t0)}")
         return
 
-    def load_coadd_file(self, g3coaddfile, g3coadds):
+    def load_coadd_file(self, g3coaddfile, g3coadds, season=None):
         """Load a single coadd file"""
 
         if self.NP > 1:
@@ -331,13 +338,61 @@ class g3worker():
             del frame["Wunpol"], frame["Wpol"]
             tmap = frame.pop("T")
             tmap.compact(zero_nans=True)
-            g3coadds["Coadd{}".format(frame["Id"])] = {"T": tmap}
+
+            band = frame["Id"]
+            coaddId = COADD_ID.format(band=band, season=season)
+
+            g3coadds[coaddId] = {"T": tmap}
             if self.config.polarized:
                 for p in "QU":
                     pmap = frame.pop(p)
-                    g3coadds["Coadd{}".format(frame["Id"])][p] = pmap
+                    g3coadds[coaddId][p] = pmap
 
         return g3coadds
+
+    def load_coadd_frame(self, g3coaddfile, season=None):
+        """Load frame(s) from single g3 coadd file"""
+
+        self.logger.info(f"Reading coadd file(s): {g3coaddfile}")
+
+        hdr = pre_populate_metadata()
+        hdr['PARENT'] = (os.path.basename(g3coaddfile), 'Name of parent file')
+
+        # Loop over frames
+        for frame in core.G3File(g3coaddfile):
+            self.logger.debug(f"Reading frame: {frame}")
+
+            if frame.type != core.G3FrameType.Map:
+                continue
+            # if frame["Id"] not in self.config.band:
+            # Need to reformat the "Id" on the frame as it comes in the form of
+            # Coadd{BAND} (i.e.: Coadd150GHz) and we just want to get the BAND
+            # Extract just the relevant band from frame["Id"]
+            try:
+                band = re.findall("90GHz|150GHz|220GHz", frame['Id'])[0]
+            except IndexError:
+                band = frame['Id']
+                continue
+            if band not in self.config.band:
+                self.logger.warning(f"Ignoring frame: {frame['Id']} not in {self.config.band}")
+                continue
+            if not self.config.polarized:
+                maps.map_modules.MakeMapsUnpolarized(frame)
+            maps.map_modules.RemoveWeights(frame, zero_nans=True)
+            del frame["Wunpol"], frame["Wpol"]
+            tmap = frame.pop("T")
+            tmap.compact(zero_nans=True)
+
+            coaddId = COADD_ID.format(band=band, season=season)
+            self.g3coadds[coaddId] = {"T": tmap}
+            self.logger.info(f"Loaded coadd frame for T:{coaddId}")
+            if self.config.polarized:
+                for p in "QU":
+                    pmap = frame.pop(p)
+                    self.g3coadds[coaddId][p] = pmap
+                    self.logger.info("Loaded coadd frame for {p}:{coaddId}")
+
+            return
 
     def g3_to_fits(self, g3file, overwrite=False, fitsfile=None, trim=True):
         """ Dump g3file as fits"""
@@ -498,17 +553,28 @@ class g3worker():
 
         # Construct the map_id
         band = hdr['BAND']
-        coaddId = 'Coadd'+band
+        season = hdr['SEASON']
+        short_season = season.replace("spt3g-", "")
+        coaddId = COADD_ID.format(band=band, season=short_season)
+
         # Create a pipe
         self.logger.info(f"Loading pipe for {g3file} band: {band}")
         pipe = core.G3Pipeline()
 
+        # Find the filename
+        coadds_path = "/data/spt3g/archive/transients-coadds"
+        g3coadd_filename = os.path.join(coadds_path, get_coadd_filename(band, hdr['SEASON']))
+        if coaddId in self.g3coadds:
+            self.logger.info(f"Coadd frame already loaded for {coaddId}")
+        else:
+            self.load_coadd_frame(g3coadd_filename, season=short_season)
+
         pipe.Add(core.G3Reader, filename=g3file)
-        if self.filter_transient_coadd is True:
+        if self.config.filter_transient_coadd is True:
             # Match the band of the coadd
             self.logger.info(f"Adding InjectMaps for {coaddId}")
             pipe.Add(maps.InjectMaps,
-                     map_id=coaddId,
+                     map_id=f"Coadd{band}",
                      maps_in=self.g3coadds[coaddId],
                      ignore_missing_weights=True)
 
@@ -710,7 +776,6 @@ def get_metadata(g3file, logger=None):
     g3 = core.G3File(g3file)
     logger.info(f"Loading: {g3file} for metadata extraction")
     for frame in g3:
-
         # Extract metadata
         if frame.type == core.G3FrameType.Observation or frame.type == core.G3FrameType.Map:
             logger.info(f"Extracting metadata from frame: {frame.type}")
@@ -731,6 +796,13 @@ def get_metadata(g3file, logger=None):
     if field_name not in _ALL_SPT_FIELDS:
         logger.warning(f"{field_name} not in SPT fields... continuing with trepidation")
 
+    # Get the field season
+    try:
+        field_season = get_field_season(hdr)
+    except Exception:
+        logger.warning(f"Cannot get field season for file: {g3file}")
+        field_season = ''
+    hdr['SEASON'] = (field_season, "Field Season")
     logger.info(f"Metadata Extraction time: {elapsed_time(t0)}")
     return hdr
 
@@ -754,7 +826,7 @@ def get_field_season(hdr, logger=None):
     else:
         field_season = sources.get_field_season(field_name)
 
-    logger.info(f"Will use field: {field_season} for file: {parent}")
+    logger.info(f"Will use field_season: {field_season} for file: {parent}")
     return field_season
 
 
@@ -993,13 +1065,6 @@ def digest_g3file(g3file):
     "Function to digest a g3 file"
     # Get the metadata for folder information
     hdr = get_metadata(g3file)
-    # Get the field season
-    try:
-        field_season = get_field_season(hdr)
-    except Exception:
-        logger.warning(f"Cannot get field season for file: {g3file}")
-        field_season = ''
-    hdr['SEASON'] = (field_season, "Field Season")
     # ID and FILENAME
     hdr['ID'] = (os.path.basename(g3file).split('.g3')[0], 'ID')
     hdr['FILENAME'] = (os.path.basename(g3file), 'The Filename')
@@ -1212,3 +1277,15 @@ def metadata_to_astropy_header(metadata):
     for key, value in metadata.items():
         header[key] = (value[0], value[1])
     return header
+
+
+def get_coadd_filename(band, season):
+
+    short_season = season.replace("spt3g-", "")
+    if season == 'spt3g-winter':
+        filename = f"map_coadd_{band}_{short_season}_2019-2023_tonly.g3.gz"
+    elif 'wide' in season:
+        filename = f"map_coadd_{band}_{short_season}_yearAB_tonly.g3.gz"
+    else:
+        print(f"Cannot find filename for {band}/{season}")
+    return filename

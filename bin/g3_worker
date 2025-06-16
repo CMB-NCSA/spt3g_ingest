@@ -23,11 +23,13 @@ def cmdline():
     # Filter options
     parser.add_argument("--filter_transient", action='store_true', default=False,
                         help="Filter daily maps for transients")
+    parser.add_argument("--filter_transient_coadd", action='store_true', default=False,
+                        help="Filter and Coadd substract daily maps for transients")
     parser.add_argument("--passthrough", action='store_true', default=False,
                         help="Passthrough maps as FITS")
-    parser.add_argument("--coadd", nargs="*", default=None,
-                        help="Input coadd map filename(s). This coadd(s) will be \
-                              subtracted from the input map(s)")
+    # parser.add_argument("--coadd", nargs="*", default=None,
+    #                    help="Input coadd map filename(s). This coadd(s) will be \
+    #                          subtracted from the input map(s)")
     parser.add_argument("--band", nargs="+", default=all_bands, choices=all_bands,
                         help="The bands to select from: 90GHz, 150GHz and 220GHz")
     parser.add_argument("--polarized", action="store_true", default=False,
@@ -88,11 +90,11 @@ def cmdline():
         args.compress = None
 
     # Some checks in case we want to filter for transients
-    if args.filter_transient:
-        # Check that coadds has same number as bands
-        if args.coadd is not None and len(args.coadd) != len(args.band):
-            msg = f"Mismatch number of coadd (g3) files[{len(args.coadd)}] vs bands[{len(args.band)}]"
-            raise RuntimeError(msg)
+    # if args.filter_transient:
+    #    # Check that coadds has same number as bands
+    #    if args.coadd is not None and len(args.coadd) != len(args.band):
+    #        msg = f"Mismatch number of coadd (g3) files[{len(args.coadd)}] vs bands[{len(args.band)}]"
+    #        raise RuntimeError(msg)
 
     # Check environmental variables for indirect_write
     if args.indirect_write_path is None and args.indirect_write is True:
