@@ -37,8 +37,8 @@ def cmdline():
     parser.add_argument("--compute_snr_annulus", action="store_true", default=False,
                         help="Compute signal to noise maps. The noise is determined from the RMS of "
                         "an annulus around each pixel. The SNR map is then saved to each map frame.")
-    parser.add_argument("--mask", action="store_true", default=False,
-                        help="Mask sources before filtering")
+    parser.add_argument("--preload_coadds", action="store_true", default=False,
+                        help="Query DB and preload coadd frames")
 
     # Custom field Name
     parser.add_argument("--field_name", type=str, default=None,
@@ -48,9 +48,9 @@ def cmdline():
                         help="Ingest files")
     parser.add_argument("--replace", action='store_true', default=False,
                         help="Replace ingest entry")
-    parser.add_argument("--tablename", action='store', default="file_info_v1",
+    parser.add_argument("--tablename", action='store', default="g3file_info",
                         help="Table name with file infomation")
-    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g.db",
+    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_archive.db",
                         help="Name of the sqlite3 database file")
 
     # Read options

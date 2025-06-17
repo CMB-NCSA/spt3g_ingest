@@ -97,11 +97,16 @@ def extract_values_header(header, Fd=data_types.Fd):
     return values
 
 
+def create_con(dbname):
+    """Establish connection to DB"""
+    logger.info(f"Establishing DB connection to: {dbname}")
+    con = sqlite3.connect(dbname)
+    return con
+
+
 def connect_db(dbname, tablename='FILE_INFO_V0', Fd=data_types.Fd):
     """Establisih connection to DB"""
     logger.info(f"Establishing DB connection to: {dbname}")
-    # Connect to DB
-    # SQLlite DB lives in a file
     con = sqlite3.connect(dbname)
     # Create the table if does not exist
     check_dbtable(dbname, tablename, Fd=Fd)
@@ -244,3 +249,23 @@ def execute_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):
         finally:
             if con:
                 con.close()
+
+
+def get_query_seasons(tablename, files=[]):
+    """Format query template"""
+
+    query_files_template = """
+    select FILENAME, BAND, FIELD, SEASON from {tablename}
+      where
+       {in_files}
+    """
+
+    # Get just the basename of the files
+    basefiles = [os.path.basename(f) for f in files]
+
+    # Formatting in_files
+    filelist = ','.join("\'{}\'".format(s) for s in basefiles)
+    in_files = f"FILENAME in ({filelist})"
+    kw = {'tablename': tablename,
+          'in_files': in_files}
+    return query_files_template.format(**kw)
