@@ -75,6 +75,7 @@ class g3worker():
         # Check input files vs file list
         self.check_input_files()
 
+        # Turn on/off subtract
         if self.config.filter_transient_coadd:
             self.subtract_coadd = True
         else:
@@ -89,10 +90,11 @@ class g3worker():
                 name = get_coadd_filename(band, season=season)
                 print(name)
 
+            print(self.coadd_galaxy_keys)
             for key in self.coadd_galaxy_keys:
-                #print(key)
+                # print(key)
                 band, season, field = key.split()
-                print(band, season, field)
+                # print(band, season, field)
                 name = get_coadd_filename(band, season=season, field=field)
                 print(name)
             exit()
