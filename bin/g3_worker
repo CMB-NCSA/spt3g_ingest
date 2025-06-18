@@ -27,9 +27,11 @@ def cmdline():
                         help="Filter and Coadd substract daily maps for transients")
     parser.add_argument("--passthrough", action='store_true', default=False,
                         help="Passthrough maps as FITS")
-    # parser.add_argument("--coadd", nargs="*", default=None,
-    #                    help="Input coadd map filename(s). This coadd(s) will be \
-    #                          subtracted from the input map(s)")
+    parser.add_argument("--coadds", nargs="*", default=None,
+                        help="Input coadd map filename(s). This coadd(s) will be \
+                        subtracted from the input map(s)")
+    parser.add_argument("--preload_coadds", action="store_true", default=False,
+                        help="Query DB and preload coadd frames")
     parser.add_argument("--band", nargs="+", default=all_bands, choices=all_bands,
                         help="The bands to select from: 90GHz, 150GHz and 220GHz")
     parser.add_argument("--polarized", action="store_true", default=False,
@@ -37,12 +39,11 @@ def cmdline():
     parser.add_argument("--compute_snr_annulus", action="store_true", default=False,
                         help="Compute signal to noise maps. The noise is determined from the RMS of "
                         "an annulus around each pixel. The SNR map is then saved to each map frame.")
-    parser.add_argument("--preload_coadds", action="store_true", default=False,
-                        help="Query DB and preload coadd frames")
 
     # Custom field Name
     parser.add_argument("--field_name", type=str, default=None,
                         help="SPT field name (optional) to overide metadata")
+
     # Ingest options
     parser.add_argument("--ingest", action='store_true', default=False,
                         help="Ingest files")
@@ -89,13 +90,6 @@ def cmdline():
     if args.compress == 'None':
         args.compress = None
 
-    # Some checks in case we want to filter for transients
-    # if args.filter_transient:
-    #    # Check that coadds has same number as bands
-    #    if args.coadd is not None and len(args.coadd) != len(args.band):
-    #        msg = f"Mismatch number of coadd (g3) files[{len(args.coadd)}] vs bands[{len(args.band)}]"
-    #        raise RuntimeError(msg)
-
     # Check environmental variables for indirect_write
     if args.indirect_write_path is None and args.indirect_write is True:
         if 'SPT3G_INGEST_WRITE_PATH' in os.environ:
@@ -116,6 +110,10 @@ def cmdline():
     # Define the prefix for staging input files
     if args.stage:
         args.stage_prefix = os.path.join(args.stage_path, 'spt3g_ingest-stage-')
+
+    # You cannot have both --coadds and --preload_coadds
+    if args.coadds is not None and args.preload_coadds is True:
+        raise RuntimeError("Select --coadds or --preload_coadds, but not both")
 
     return args
 

@@ -251,18 +251,18 @@ def execute_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):
                 con.close()
 
 
-def get_query_seasons(tablename, files=[]):
-    """Format query template"""
+def get_query_field_seasons(tablename, files=[]):
+    """
+    Format query template to get field and seasons
+    """
 
     query_files_template = """
     select FILENAME, BAND, FIELD, SEASON from {tablename}
       where
        {in_files}
     """
-
     # Get just the basename of the files
     basefiles = [os.path.basename(f) for f in files]
-
     # Formatting in_files
     filelist = ','.join("\'{}\'".format(s) for s in basefiles)
     in_files = f"FILENAME in ({filelist})"

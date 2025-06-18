@@ -81,25 +81,16 @@ class g3worker():
         else:
             self.subtract_coadd = False
 
+        # Find and preload coadd from database
         if self.config.preload_coadds:
             self.get_coadd_seasons()
-            print(self.coadd_seasons_keys)
-            for key in self.coadd_seasons_keys:
-                band, season = key.split()
-                # print(band, season)
-                name = get_coadd_filename(band, season=season)
-                print(name)
-
-            print(self.coadd_galaxy_keys)
-            for key in self.coadd_galaxy_keys:
-                # print(key)
-                band, season, field = key.split()
-                # print(band, season, field)
-                name = get_coadd_filename(band, season=season, field=field)
-                print(name)
+            self.get_unique_coadd_keys()
+            self.get_coadd_names_from_keys()
+            self.load_coadds()
+            self.logger.info(f"Coadd keys:{self.g3coadds.keys()}")
             exit()
 
-        # # Load coadds for transients
+        # # Load coadds for input list
         # if self.config.coadd is not None:
         #    self.load_coadds()
         #    self.logger.info(f"Coadd keys:{self.g3coadds.keys()}")
@@ -107,35 +98,65 @@ class g3worker():
         # else:
         #    self.subtract_coadd = False
 
+    def get_coadd_names_from_keys(self):
+        """
+        Get the names of the coadd files using the keys that were contructed
+        from the query and unique combination of band+season and band+field
+        """
+        filenames = []
+        # Loop over the season keys
+        for key in self.coadd_seasons_keys:
+            band, season = key.split()
+            name = get_coadd_filename(band, season=season)
+            self.logger.debug(f"Added coadd filename: {name}")
+            filenames.append(name)
+
+        # Loop over the field keywords
+        for key in self.coadd_fields_keys:
+            band, season, field = key.split()
+            name = get_coadd_filename(band, season=season, field=field)
+            self.logger.debug(f"Added coadd filename: {name}")
+            filenames.append(name)
+        # Now we assign filenames to self.config.coadds
+        self.config.coadds = filenames
+
     def get_coadd_seasons(self):
         """
         Query the archive DB to get the coadd file ID/name for each g3 observation
         """
         con = sqltools.create_con(self.config.dbname)
         # Build the query:
-        query = sqltools.get_query_seasons(self.config.tablename, files=self.config.files)
-        self.logger.info("Running query to find seasons")
-        self.logger.debug(query)
+        query = sqltools.get_query_field_seasons(self.config.tablename, files=self.config.files)
+        self.logger.info("Running query to find seasons and fields for input files")
+        # self.logger.debug(query)
         df = pd.read_sql_query(query, con)
+        # Store the short name of the season
         df['SEASON_SHORT'] = df['SEASON'].str.replace('spt3g-', '', regex=False)
+        # Combine BAND+SEASON and BAND+FIELD
         df['BAND_SEASON'] = df['BAND'] + ' ' + df['SEASON']
         df['BAND_FIELD'] = df['BAND'] + ' ' + df['FIELD']
         # Pass into the class for later
         self.df_query = df
 
+    def get_unique_coadd_keys(self):
+        """
+        Get the list of unique keys of coadd files needed for the input file list.
+        For winter+summer observations, we need one per season+band.
+        For galaxy observations the coadds are field+band
+        """
+        df = self.df_query
         # Select unique band+field for non spt3g-galaxy season
-        df_notgalaxy = df.loc[df['SEASON'] != 'spt3g-galaxy', ['BAND', 'FIELD', 'SEASON']]
-        df_notgalaxy['KEY'] = df_notgalaxy['BAND'] + ' ' + df_notgalaxy['SEASON']
-        self.coadd_seasons_keys = df_notgalaxy['KEY'].unique().tolist()
+        df_season = df.loc[df['SEASON'] != 'spt3g-galaxy', ['BAND', 'FIELD', 'SEASON']]
+        df_season['KEY'] = df_season['BAND'] + ' ' + df_season['SEASON']
+        self.coadd_seasons_keys = df_season['KEY'].unique().tolist()
 
-        # Select unique band+field for spt3g-galaxy
-        df_galaxy = df.loc[df['SEASON'] == 'spt3g-galaxy', ['BAND', 'FIELD', 'SEASON']]
-        df_galaxy['KEY'] = df_galaxy['BAND'] + ' ' + df_galaxy['SEASON'] + ' ' + df_galaxy['FIELD']
-        self.coadd_galaxy_keys = df_galaxy['KEY'].unique().tolist()
-        # print(df.head())
+        # Select unique band+field for spt3g-galaxy fields
+        df_field = df.loc[df['SEASON'] == 'spt3g-galaxy', ['BAND', 'FIELD', 'SEASON']]
+        df_field['KEY'] = df_field['BAND'] + ' ' + df_field['SEASON'] + ' ' + df_field['FIELD']
+        self.coadd_fields_keys = df_field['KEY'].unique().tolist()
 
     def check_input_files(self):
-        " Check if the inputs are a list or a file with a list"
+        """Check if the inputs are a list or a file with a list"""
 
         t = magic.Magic(mime=True)
         if self.nfiles == 1 and t.from_file(self.config.files[0]) == 'text/plain':
@@ -330,7 +351,7 @@ class g3worker():
             return_dict = None
 
         # Loop over all coadd files
-        for filename in self.config.coadd:
+        for filename in self.config.coadds:
             if self.NP >= self.Ncoadds and self.NP > 1:
                 self.logger.info(f"Starting mp.Process for {filename}")
                 ar = (filename, return_dict)
@@ -357,47 +378,46 @@ class g3worker():
         self.logger.info(f"Total time coadd read: {elapsed_time(t0)}")
         return
 
-    def load_coadd_file(self, g3coaddfile, g3coadds, season=None):
-        """Load a single coadd file"""
-
-        if self.NP > 1:
-            self.setup_logging()
-
-        self.logger.info(f"Reading coadd file(s): {g3coaddfile}")
-
-        if g3coadds is None:
-            g3coadds = {}
-
-        hdr = pre_populate_metadata()
-        hdr['PARENT'] = (os.path.basename(g3coaddfile), 'Name of parent file')
-
-        # Loop over frames
-        for frame in core.G3File(g3coaddfile):
-            self.logger.debug(f"Reading frame: {frame}")
-
-            if frame.type != core.G3FrameType.Map:
-                continue
-            if frame["Id"] not in self.config.band:
-                self.logger.warning(f"Ignoring frame: {frame['Id']} not in {self.config.band}")
-                continue
-            if not self.config.polarized:
-                maps.map_modules.MakeMapsUnpolarized(frame)
-            maps.map_modules.RemoveWeights(frame, zero_nans=True)
-            del frame["Wunpol"], frame["Wpol"]
-            tmap = frame.pop("T")
-            tmap.compact(zero_nans=True)
-
-            band = frame["Id"]
-            coaddId = COADD_ID.format(band=band, season=season)
-
-            g3coadds[coaddId] = {"T": tmap}
-            if self.config.polarized:
-                for p in "QU":
-                    pmap = frame.pop(p)
-                    g3coadds[coaddId][p] = pmap
-
-        return g3coadds
-
+    # def load_coadd_file(self, g3coaddfile, g3coadds, season=None):
+    #     """Load a single coadd file"""
+    #
+    #     if self.NP > 1:
+    #         self.setup_logging()
+    #
+    #     self.logger.info(f"Reading coadd file(s): {g3coaddfile}")
+    #
+    #     if g3coadds is None:
+    #         g3coadds = {}
+    #
+    #     hdr = pre_populate_metadata()
+    #     hdr['PARENT'] = (os.path.basename(g3coaddfile), 'Name of parent file')
+    #
+    #     # Loop over frames
+    #     for frame in core.G3File(g3coaddfile):
+    #         self.logger.debug(f"Reading frame: {frame}")
+    #
+    #         if frame.type != core.G3FrameType.Map:
+    #             continue
+    #         if frame["Id"] not in self.config.band:
+    #             self.logger.warning(f"Ignoring frame: {frame['Id']} not in {self.config.band}")
+    #             continue
+    #         if not self.config.polarized:
+    #             maps.map_modules.MakeMapsUnpolarized(frame)
+    #         maps.map_modules.RemoveWeights(frame, zero_nans=True)
+    #         del frame["Wunpol"], frame["Wpol"]
+    #         tmap = frame.pop("T")
+    #         tmap.compact(zero_nans=True)
+    #
+    #         band = frame["Id"]
+    #         coaddId = COADD_ID.format(band=band, season=season)
+    #
+    #         g3coadds[coaddId] = {"T": tmap}
+    #         if self.config.polarized:
+    #             for p in "QU":
+    #                 pmap = frame.pop(p)
+    #                 g3coadds[coaddId][p] = pmap
+    #
+    #     return g3coadds
 
     def g3_to_fits(self, g3file, overwrite=False, fitsfile=None, trim=True):
         """ Dump g3file as fits"""
@@ -1296,7 +1316,7 @@ def get_coadd_filename(band, season=None, field=None):
     elif 'wide' in season:
         filename = f"map_coadd_{band}_{short_season}_yearAB_tonly.g3.gz"
     elif season == 'spt3g-galaxy':
-        filename = f"coaddmaps_galaxy_2024_pointing_corrected_gain_calibrated_{band}_{field}.g3"
+        filename = f"map_coadd_{band}_{field}_2024_tonly.g3.gz"
     else:
         print(f"Cannot find filename for {band}/{season}")
     return filename
