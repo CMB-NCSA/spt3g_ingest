@@ -86,8 +86,10 @@ class g3worker():
             self.get_coadd_seasons()
             self.get_unique_coadd_names()
             self.load_coadds()
+            exit()
         elif self.config.coadds:
             self.load_coadds()
+            exit()
 
     def get_coadd_seasons(self):
         """
@@ -121,17 +123,11 @@ class g3worker():
         keys = df_season['KEY'].unique().tolist()
 
         self.coadd_filenames = []
-        # data_rows = []
-        # col_names = ['ID', 'FILENAME', 'BAND', 'SEASON', 'SEASON_SHORT', 'FIELD']
         for key in keys:
             band, season = key.split()
-            # short_season = season.replace("spt3g-", "")
-            # id = COADD_ID.format(band=band, field_or_season=short_season)
             name = get_coadd_filename(band, season=season)
             self.logger.debug(f"Added coadd filename: {name}")
             self.coadd_filenames.append(name)
-            # values = [id, name, band, season, short_season, None]
-            # data_rows.append(dict(zip(col_names, values)))
 
         # Select unique band+field for spt3g-galaxy fields
         df_field = df.loc[df['SEASON'] == 'spt3g-galaxy', ['BAND', 'FIELD', 'SEASON']]
@@ -140,18 +136,12 @@ class g3worker():
         keys = df_field['KEY'].unique().tolist()
         for key in keys:
             band, season, field = key.split()
-            # short_season = season.replace("spt3g-", "")
-            # id = COADD_ID.format(band=band, field_or_season=field)
             name = get_coadd_filename(band, season=season, field=field)
             self.logger.debug(f"Added coadd filename: {name}")
-            # values = [id, name, band, season, short_season, field]
-            # data_rows.append(dict(zip(col_names, values)))
             self.coadd_filenames.append(name)
 
+        # Get the full path
         self.config.coadds = [get_coadd_archive_path() + os.sep + f for f in self.coadd_filenames]
-        # Make a pandas df
-        # self.coadds_df = pd.DataFrame(data_rows, columns=col_names)
-        # self.logger.debug(f"\n{self.coadds_df}")
 
     def check_input_files(self):
         """Check if the inputs are a list or a file with a list"""
@@ -184,7 +174,7 @@ class g3worker():
             # Avoid small files that make filtering crash
             if self.skip_g3file(g3file, size=50):
                 continue
-            self.logger.info(f"Starting mp.Process for {g3file}")
+            self.logger.info(f"Creating mp.Process for {g3file}")
             fargs = (g3file, k)
             p = mp.Process(target=self.run_g3file, args=fargs)
             jobs.append(p)
@@ -341,8 +331,9 @@ class g3worker():
         self.Ncoadds = len(self.config.coadds)
 
         # Prepare for MP, use mp.Manage to hold outputs
-        if self.NP >= self.Ncoadds and self.NP > 1:
+        if self.NP > 1:
             p = {}
+            jobs = []
             manager = mp.Manager()
             return_dict = manager.dict()
         else:
@@ -350,28 +341,28 @@ class g3worker():
 
         # Loop over all coadd files
         for filename in self.config.coadds:
-            if self.NP >= self.Ncoadds and self.NP > 1:
-                self.logger.info(f"Starting mp.Process for {filename}")
-                ar = (filename, return_dict)
-                p[filename] = mp.Process(target=load_coadd_frame, args=ar)
-                self.logger.info(f"Starting job: {p[filename].name}")
-                p[filename].start()
+            if self.NP > 1:
+                self.logger.info(f"Creating mp.Process for {filename}")
+                fargs = (filename, return_dict)
+                p = mp.Process(target=load_coadd_frame, args=fargs)
+                jobs.append(p)
+                # self.logger.info(f"Starting job: {p[filename].name}")
             else:
                 res = load_coadd_frame(filename, return_dict)
                 self.g3coadds.update(res)
 
         # Make sure all process are closed before proceeding
-        if self.NP >= self.Ncoadds and self.NP > 1:
-            for filename in p.keys():
-                self.logger.info(f"Joining job: {p[filename].name}")
-                p[filename].join()
-            del p
-            # Update with returned dictionary
+        if self.NP > 1:
+            for job_chunk in chunker(jobs, self.NP):
+                for job in job_chunk:
+                    self.logger.info(f"Starting job: {job.name}")
+                    job.start()
+                for job in job_chunk:
+                    self.logger.info(f"Joining job: {job.name}")
+                    job.join()
+                    self.logger.info(f"Completed job: {job.name}")
+                    del job
             self.g3coadds = return_dict
-
-        # Check we have same number of coadds and bands
-        if len(self.g3coadds) != len(self.config.band):
-            raise RuntimeError("Missing coadd frame(s)")
 
         # Just to make sure we got them
         for k, v in self.g3coadds.items():
@@ -1328,14 +1319,14 @@ def load_coadd_frame(g3coaddfile, g3coadds=None,
                 # self.g3coadds[coaddId][p] = pmap
                 logger.info("Loaded coadd frame for {p}")
 
-        size_mb = sys.getsizeof(g3coadd_frame)/(1024 * 1024)
-        logger.debug(f"Size of coadd frame: {size_mb}[Mb]")
-        logger.info(f"Total time: {elapsed_time(t0)} for loading coadd: {g3coaddfile}")
-
         # Update dictionary in case it exists
         if g3coadds is not None:
             key = os.path.basename(g3coaddfile)
             g3coadds[key] = g3coadd_frame
+
+        size_mb = sys.getsizeof(g3coadd_frame)/(1024 * 1024)
+        logger.debug(f"Size of coadd frame: {size_mb}[Mb]")
+        logger.info(f"Total time: {elapsed_time(t0)} for loading coadd: {g3coaddfile}")
 
         return g3coadd_frame
 
