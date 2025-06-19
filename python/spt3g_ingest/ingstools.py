@@ -364,8 +364,8 @@ class g3worker():
             self.g3coadds = return_dict
 
         # Just to make sure we got them
-        self.logger.info(f"Total time coadd read: {elapsed_time(t0)}")
-        self.loger.info("List of loaded coadds:")
+        self.logger.info(f"Total time to read coadd files: {elapsed_time(t0)}")
+        self.logger.info("List of loaded coadds:")
         for k, v in self.g3coadds.items():
             self.logger.info(f"NAME:{k} -- FRAME:{v}")
         return
