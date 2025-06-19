@@ -25,7 +25,8 @@ from astropy.nddata import Cutout2D
 import pandas as pd
 
 # The filetype extensions for file types
-FILETYPE_SUFFIX = {'filtered': 'fltd', 'passthrough': 'psth'}
+# FILETYPE_SUFFIX = {'filtered': 'fltd', 'passthrough': 'psth'}
+FILETYPE_SUFFIX = {'filtered': 'fltd', 'coaddfiltered': 'cfltd', 'passthrough': 'psth'}
 FILETYPE_EXT = {'FITS': 'fits', 'G3': 'g3.gz'}
 
 # The format for the COADS_ID frame
@@ -86,10 +87,8 @@ class g3worker():
             self.get_coadd_seasons()
             self.get_unique_coadd_names()
             self.load_coadds()
-            exit()
         elif self.config.coadds:
             self.load_coadds()
-            exit()
 
     def get_coadd_seasons(self):
         """
@@ -365,9 +364,10 @@ class g3worker():
             self.g3coadds = return_dict
 
         # Just to make sure we got them
-        for k, v in self.g3coadds.items():
-            print(k, v)
         self.logger.info(f"Total time coadd read: {elapsed_time(t0)}")
+        self.loger.info("List of loaded coadds:")
+        for k, v in self.g3coadds.items():
+            self.logger.info(f"NAME:{k} -- FRAME:{v}")
         return
 
     def g3_to_fits(self, g3file, overwrite=False, fitsfile=None, trim=True):
@@ -499,7 +499,10 @@ class g3worker():
             tmp_dir = mkdtemp(prefix=self.config.indirect_write_prefix)
 
         # Define output names
-        suffix = FILETYPE_SUFFIX['filtered']
+        if coadd_subtract:
+            suffix = FILETYPE_SUFFIX['coaddfiltered']
+        else:
+            suffix = FILETYPE_SUFFIX['filtered']
         outname = {}
         skipfile = {}
         for ft in self.config.output_filetypes:
@@ -539,12 +542,14 @@ class g3worker():
         pipe = core.G3Pipeline()
 
         # Find the filename
-        coadds_path = get_coadd_archive_path()
-        g3coaddfile = os.path.join(coadds_path, get_coadd_filename(band, field=field, season=season))
+        g3coaddfile = get_coadd_filename(band, field=field, season=season)
         if g3coaddfile in self.g3coadds:
-            self.logger.info(f"Coadd frame already loaded for: {g3coaddfile}")
+            self.logger.info(f"Coadd frame ALREADY loaded for: {g3coaddfile}")
         else:
-            self.g3coadds[g3coaddfile] = load_coadd_frame(g3coaddfile)
+            self.logger.info(f"Coadd frame NOT loaded for: {g3coaddfile}")
+            g3coaddfile_fullpath = os.path.join(get_coadd_archive_path(), g3coaddfile)
+            self.g3coadds[g3coaddfile] = load_coadd_frame(g3coaddfile_fullpath)
+            self.logger.info(f"Coadd LOADED for: {g3coaddfile}")
 
         pipe.Add(core.G3Reader, filename=g3file)
         if coadd_subtract is True:
