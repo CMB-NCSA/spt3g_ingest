@@ -49,7 +49,7 @@ def cmdline():
                         help="Ingest files")
     parser.add_argument("--replace", action='store_true', default=False,
                         help="Replace ingest entry")
-    parser.add_argument("--tablename", action='store', default="g3file_info",
+    parser.add_argument("--tablename", action='store', default="g3fileinfo",
                         help="Table name with file infomation")
     parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_archive.db",
                         help="Name of the sqlite3 database file")
