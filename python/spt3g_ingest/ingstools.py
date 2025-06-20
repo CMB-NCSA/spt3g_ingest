@@ -1051,9 +1051,11 @@ def digest_g3file(g3file):
     hdr['FILENAME'] = (os.path.basename(g3file), 'The Filename')
     # Store the relative filepath, remove basepath from Taiga
     # We need to chage this to /project/ncsa/caps/spt3g on ICC
-    string_to_remove = "/data/spt3g/"
+    string_to_remove_caps = "/data/spt3g/"
+    string_to_remove_icc = "/project/ncsa/caps/spt3g/"
     filepath = os.path.dirname(g3file)
-    filepath = filepath.replace(string_to_remove, "")
+    filepath = filepath.replace(string_to_remove_caps, "")
+    filepath = filepath.replace(string_to_remove_icc, "")
     hdr['FILEPATH'] = (filepath, 'The Filepath')
     return hdr
 
