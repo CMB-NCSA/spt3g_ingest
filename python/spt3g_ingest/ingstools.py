@@ -76,18 +76,12 @@ class g3worker():
         # Check input files vs file list
         self.check_input_files()
 
-        # Turn on/off subtract
-        if self.config.filter_transient_coadd:
-            self.subtract_coadd = True
-        else:
-            self.subtract_coadd = False
-
         # Find and preload coadd from database
-        if self.config.preload_coadds and self.subtract_coadd:
+        if self.config.preload_coadds and self.config.filter_transient_coadd:
             self.get_coadd_seasons()
             self.get_unique_coadd_names()
             self.load_coadds()
-        elif self.config.coadds and self.subtract_coadd:
+        elif self.config.coadds and self.config.filter_transient_coadd:
             self.load_coadds()
 
     def get_coadd_seasons(self):
