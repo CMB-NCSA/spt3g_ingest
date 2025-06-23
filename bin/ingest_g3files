@@ -56,7 +56,7 @@ if __name__ == "__main__":
     for g3file in args.files:
         logger.info(f"Ingesting g3 file to DB: {k}/{nfiles} files")
         hdr = ingstools.digest_g3file(g3file)
-        sqltools.ingest_g3file(hdr, args.tablename,
+        sqltools.ingest_g3file(g3file, hdr, args.tablename,
                                dbname=args.dbname,
                                dryrun=args.dryrun,
                                replace=args.replace)

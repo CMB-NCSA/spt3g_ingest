@@ -7,6 +7,7 @@ import spt3g_ingest.data_types as data_types
 import logging
 import re
 import time
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +185,7 @@ def ingest_fitsfile(fitsfile, tablename, dbname=None, replace=False):
     execute_with_retry(fitsfile, query, dbname, max_retries=10)
 
 
-def ingest_g3file(header, tablename, dbname=None, replace=False, dryrun=False):
+def ingest_g3file(g3file, header, tablename, dbname=None, replace=False, dryrun=False):
     """ Ingest file into an sqlite3 table"""
 
     # Repack header to astropy format
@@ -196,14 +197,18 @@ def ingest_g3file(header, tablename, dbname=None, replace=False, dryrun=False):
     else:
         or_replace = ' '
 
-    g3file = header['FILENAME']
-    logger.info(f"Ingesting: {g3file} to: {tablename}")
+    g3file_short = header['FILENAME']
+    logger.info(f"Ingesting: {g3file_short} to: {tablename}")
 
     # Extra metadata for ingestion
     INGESTION_DATE = Time.now().isot
 
     header['INGESTION_DATE'] = INGESTION_DATE
     header['FILETYPE'] = 'rawmap'
+
+    # Get file size and md5sum
+    header['SIZEINBYTES'], header['MD5SUM'] = compute_md5_and_size(g3file)
+
     # Replace '-' with "_"
     header = fix_fits_keywords(header)
 
@@ -225,6 +230,20 @@ def ingest_g3file(header, tablename, dbname=None, replace=False, dryrun=False):
         logger.info(f"DRYRUN: {query}")
     else:
         execute_with_retry(g3file, query, dbname, max_retries=10)
+
+
+def compute_md5_and_size(g3file):
+    """Compute full path, size, and MD5 for one file."""
+
+    if not os.path.isfile(g3file):
+        raise FileNotFoundError(f"File not found: {g3file}")
+
+    size = os.path.getsize(g3file)
+    md5 = hashlib.md5()
+    with open(g3file, 'rb') as f:
+        while chunk := f.read(8192):
+            md5.update(chunk)
+    return size, md5.hexdigest()
 
 
 def execute_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):

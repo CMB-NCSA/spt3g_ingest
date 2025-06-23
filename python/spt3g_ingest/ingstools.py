@@ -83,18 +83,25 @@ class g3worker():
             self.subtract_coadd = False
 
         # Find and preload coadd from database
-        if self.config.preload_coadds:
+        if self.config.preload_coadds and self.subtract_coadd:
             self.get_coadd_seasons()
             self.get_unique_coadd_names()
             self.load_coadds()
-        elif self.config.coadds:
+        elif self.config.coadds and self.subtract_coadd:
             self.load_coadds()
 
     def get_coadd_seasons(self):
         """
         Query the archive DB to get the coadd file ID/name for each g3 observation
         """
-        con = sqltools.create_con(self.config.dbname)
+
+        # Stage db file in needed
+        if self.config.stage:
+            dbname = stage_file(self.config.dbname, stage_prefix=self.config.stage_prefix)
+        else:
+            dbname = self.config.dbname
+
+        con = sqltools.create_con(dbname)
         # Build the query:
         query = sqltools.get_query_field_seasons(self.config.tablename, files=self.config.files)
         self.logger.info("Running query to find seasons and fields for input files")
@@ -107,6 +114,9 @@ class g3worker():
         df['BAND_FIELD'] = df['BAND'] + ' ' + df['FIELD']
         # Pass into the class for later
         self.df_query = df
+        con.close()
+        if self.config.stage:
+            remove_staged_file(dbname)
 
     def get_unique_coadd_names(self):
         """
@@ -222,18 +232,18 @@ class g3worker():
 
         # Stage if needed
         if self.config.stage:
-            g3file = self.stage_g3file(g3file)
+            g3file = stage_file(g3file, stage_prefix=self.config.stage_prefix)
 
         if self.config.passthrough:
             self.g3_to_fits(g3file)
         if self.config.filter_transient:
-            self.g3_transient_filter(g3file, coadd_subtract=False)
+            self.g3_transient_filter(g3file, subtract_coadd=False)
         if self.config.filter_transient_coadd:
-            self.g3_transient_filter(g3file, coadd_subtract=True)
+            self.g3_transient_filter(g3file, subtract_coadd=True)
 
         # Remove stage file
         if self.config.stage:
-            self.remove_staged_file(g3file)
+            remove_staged_file(g3file)
 
         self.logger.info(f"Completed: {k}/{self.nfiles} files")
         self.logger.info(f"Total time: {elapsed_time(t0)} for: {g3file}")
@@ -483,7 +493,7 @@ class g3worker():
 
         return
 
-    def g3_transient_filter(self, g3file, trim=True, coadd_subtract=False):
+    def g3_transient_filter(self, g3file, trim=True, subtract_coadd=False):
         """
         Perform Transient filer on a g3file and write result as G3/FITS file
         """
@@ -499,7 +509,7 @@ class g3worker():
             tmp_dir = mkdtemp(prefix=self.config.indirect_write_prefix)
 
         # Define output names
-        if coadd_subtract:
+        if subtract_coadd is True:
             suffix = FILETYPE_SUFFIX['coaddfiltered']
         else:
             suffix = FILETYPE_SUFFIX['filtered']
@@ -534,27 +544,29 @@ class g3worker():
         band = hdr['BAND']
         season = hdr['SEASON']
         field = hdr['FIELD']
-        # short_season = season.replace("spt3g-", "")
-        # coaddId = COADD_ID.format(band=band, field_or_season=short_season)
+
+        # Find the coadd filename
+        if subtract_coadd is True:
+            g3coaddfile = get_coadd_filename(band, field=field, season=season)
+            if g3coaddfile in self.g3coadds:
+                self.logger.info(f"Coadd frame ALREADY loaded for: {g3coaddfile}")
+            else:
+                self.logger.info(f"Coadd frame NOT loaded for: {g3coaddfile}")
+                g3coaddfile_fullpath = os.path.join(get_coadd_archive_path(), g3coaddfile)
+                self.g3coadds[g3coaddfile] = load_coadd_frame(g3coaddfile_fullpath)
+                self.logger.info(f"Coadd LOADED for: {g3coaddfile}")
 
         # Create a pipe
         self.logger.info(f"Loading pipe for {g3file} band: {band}")
         pipe = core.G3Pipeline()
 
-        # Find the filename
-        g3coaddfile = get_coadd_filename(band, field=field, season=season)
-        if g3coaddfile in self.g3coadds:
-            self.logger.info(f"Coadd frame ALREADY loaded for: {g3coaddfile}")
-        else:
-            self.logger.info(f"Coadd frame NOT loaded for: {g3coaddfile}")
-            g3coaddfile_fullpath = os.path.join(get_coadd_archive_path(), g3coaddfile)
-            self.g3coadds[g3coaddfile] = load_coadd_frame(g3coaddfile_fullpath)
-            self.logger.info(f"Coadd LOADED for: {g3coaddfile}")
-
+        # Read in the g3file that we will work on
         pipe.Add(core.G3Reader, filename=g3file)
-        if coadd_subtract is True:
+
+        # If we want coadd subtraction we add it to the pipe
+        if subtract_coadd is True:
             # Match the band of the coadd
-            self.logger.info(f"Adding InjectMaps for {g3coaddfile}")
+            self.logger.info(f"Adding InjectMaps for: {g3coaddfile}")
             pipe.Add(maps.InjectMaps,
                      map_id=f"Coadd{band}",
                      maps_in=self.g3coadds[g3coaddfile],
@@ -567,7 +579,7 @@ class g3worker():
         self.logger.info(f"Adding TransientMapFiltering for {band}")
         pipe.Add(transients.TransientMapFiltering,
                  bands=self.config.band,  # or just band
-                 subtract_coadd=self.subtract_coadd,
+                 subtract_coadd=subtract_coadd,
                  field=self.field_season[g3file],
                  compute_snr_annulus=self.config.compute_snr_annulus)
 
@@ -637,26 +649,6 @@ class g3worker():
         else:
             skip = False
         return skip
-
-    def stage_g3file(self, g3file):
-        """
-        Stage input g3file to the stage directory
-        """
-        tmp_dir = mkdtemp(prefix=self.config.stage_prefix)
-        g3file_copy = os.path.join(tmp_dir, os.path.basename(g3file))
-        self.logger.info(f"Will stage: {g3file} --> {g3file_copy}")
-        # Make sure that the folder exists:
-        create_dir(os.path.dirname(g3file_copy))
-        shutil.copy2(g3file, g3file_copy)
-        return g3file_copy
-
-    def remove_staged_file(self, g3file):
-        self.logger.info(f"Removing: {g3file}")
-        os.remove(g3file)
-
-        tmp_dir = os.path.dirname(g3file)
-        self.logger.info(f"Removing tmp dir: {tmp_dir}")
-        shutil.rmtree(tmp_dir)
 
     def set_nthreads(self):
         """Set the number of theards for numexpr"""
@@ -999,6 +991,30 @@ def create_dir(dirname):
 def chunker(seq, size):
     "Chunk a sequence in chunks of a given size"
     return (seq[pos:pos + size] for pos in range(0, len(seq), size))
+
+
+def stage_file(file, stage_prefix='spt3g_ingest-stage-'):
+    """
+    Stage input file to the stage directory
+    """
+    tmp_dir = mkdtemp(prefix=stage_prefix)
+    file_copy = os.path.join(tmp_dir, os.path.basename(file))
+    logger.info(f"Will stage: {file} --> {file_copy}")
+    # Make sure that the folder exists:
+    create_dir(os.path.dirname(file_copy))
+    shutil.copy2(file, file_copy)
+    return file_copy
+
+
+def remove_staged_file(file):
+    """
+    Remove previously stage file
+    """
+    logger.info(f"Removing: {file}")
+    os.remove(file)
+    tmp_dir = os.path.dirname(file)
+    logger.info(f"Removing tmp dir: {tmp_dir}")
+    shutil.rmtree(tmp_dir)
 
 
 def relocate_g3file(g3file, outdir, symlink=False, dryrun=False, manifest=None):

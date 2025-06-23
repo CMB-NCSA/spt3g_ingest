@@ -73,7 +73,7 @@ if __name__ == "__main__":
                                         dryrun=args.dryrun,
                                         manifest=manifest)
         if args.ingest:
-            sqltools.ingest_g3file(hdr, args.tablename,
+            sqltools.ingest_g3file(g3file, hdr, args.tablename,
                                    dbname=args.dbname,
                                    dryrun=args.dryrun,
                                    replace=args.replace)
