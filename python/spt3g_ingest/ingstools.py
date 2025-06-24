@@ -48,6 +48,9 @@ _keywords_map = {'ObservationStart': ('DATE-BEG', 'Observation start date'),
 # Get the names of all of the SPT fields (so far...)
 _ALL_SPT_FIELDS = sources.get_all_fields()
 
+# The allowed bands
+_allowed_bands = ['90GHz', '150GHz', '220GHz']
+
 
 class g3worker():
 
@@ -427,8 +430,14 @@ class g3worker():
             create_dir(os.path.dirname(fitsfile))
 
         for frame in g3:
+
             # Convert to FITS
             if frame.type == core.G3FrameType.Map:
+
+                if frame['Id'] not in _allowed_bands:
+                    self.logger.warning(f"Ignoring {frame['Id']} -- not in allowed_bands")
+                    continue
+
                 self.logger.info(f"Transforming to FITS: {frame.type} -- band: {hdr['BAND']}")
                 self.logger.debug("Removing weights")
                 maps.RemoveWeights(frame, zero_nans=True)
@@ -440,11 +449,9 @@ class g3worker():
                 remove_g3_units(frame, units=core.G3Units.mK)
                 # In case we have many bands per g3 file
                 band = frame['Id']
-                # We need to add band to the filename, so we have different
-                # outputs
-                if band not in self.basename[g3file]:
-                    fitsfile = f"{self.basename[g3file]}_{band}.fits"
-                    self.logger.info(f"Adding {band} to output file: {fitsfile}")
+                if band != hdr['BAND']:
+                    self.logger.warning(f"Metadata band:{hdr['BAND']} does not match frame band: {band}")
+                    continue
 
                 if trim:
                     field = hdr['FIELD']
