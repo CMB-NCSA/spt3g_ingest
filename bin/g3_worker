@@ -9,7 +9,8 @@ from spt3g_ingest import ingstools
 
 def cmdline():
 
-    parser = argparse.ArgumentParser(description="spt3g ingestion tool")
+    all_bands = ["90GHz", "150GHz", "220GHz"]
+    parser = argparse.ArgumentParser(description="spt3g filtering and ingestion tool")
     parser.add_argument("files", nargs='+',
                         help="Filename(s) to ingest")
     parser.add_argument("--outdir", type=str, action='store', default=None,
@@ -22,24 +23,35 @@ def cmdline():
     # Filter options
     parser.add_argument("--filter_transient", action='store_true', default=False,
                         help="Filter daily maps for transients")
-    parser.add_argument("--coadd", nargs="*", default=None,
-                        help="Name of the coadd filenames (g3)")
-    parser.add_argument("--band", nargs="*", default=['90GHz', '150GHz', '220GHz'],
+    parser.add_argument("--filter_transient_coadd", action='store_true', default=False,
+                        help="Filter and Coadd substract daily maps for transients")
+    parser.add_argument("--passthrough", action='store_true', default=False,
+                        help="Passthrough maps as FITS")
+    parser.add_argument("--coadds", nargs="*", default=None,
+                        help="Input coadd map filename(s). This coadd(s) will be \
+                        subtracted from the input map(s)")
+    parser.add_argument("--preload_coadds", action="store_true", default=False,
+                        help="Query DB and preload coadd frames")
+    parser.add_argument("--band", nargs="+", default=all_bands, choices=all_bands,
                         help="The bands to select from: 90GHz, 150GHz and 220GHz")
     parser.add_argument("--polarized", action="store_true", default=False,
                         help="Filter polarized maps.")
+    parser.add_argument("--compute_snr_annulus", action="store_true", default=False,
+                        help="Compute signal to noise maps. The noise is determined from the RMS of "
+                        "an annulus around each pixel. The SNR map is then saved to each map frame.")
 
     # Custom field Name
     parser.add_argument("--field_name", type=str, default=None,
-                        help="SPT field name (optional) to insert as OBJECT")
+                        help="SPT field name (optional) to overide metadata")
+
     # Ingest options
     parser.add_argument("--ingest", action='store_true', default=False,
                         help="Ingest files")
     parser.add_argument("--replace", action='store_true', default=False,
                         help="Replace ingest entry")
-    parser.add_argument("--tablename", action='store', default="file_info_v1",
+    parser.add_argument("--tablename", action='store', default="g3fileinfo",
                         help="Table name with file infomation")
-    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g.db",
+    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_archive.db",
                         help="Name of the sqlite3 database file")
 
     # Read options
@@ -53,7 +65,9 @@ def cmdline():
                         help="Use indirect write of files to /tmp before moving to destination.")
     parser.add_argument("--indirect_write_path", action='store', default=None,
                         help="Path for indirect write.")
-
+    parser.add_argument("--output_filetypes", nargs='+', default=['FITS'],
+                        choices=["G3", "G3GZ", "FITS"],
+                        help="Output filetype [G3, G3GZ, FITS]")
     # Logging options (loglevel/log_format/log_format_date)
     default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
     default_log_format_date = '%Y-%m-%d %H:%M:%S'
@@ -76,12 +90,6 @@ def cmdline():
     if args.compress == 'None':
         args.compress = None
 
-    # Some checks in case we want to filter for transients
-    if args.filter_transient:
-        # Check that coadds has same number as bands
-        if args.coadd is not None and len(args.coadd) != len(args.band):
-            raise RuntimeError("Missing coadd (g3) files")
-
     # Check environmental variables for indirect_write
     if args.indirect_write_path is None and args.indirect_write is True:
         if 'SPT3G_INGEST_WRITE_PATH' in os.environ:
@@ -102,6 +110,10 @@ def cmdline():
     # Define the prefix for staging input files
     if args.stage:
         args.stage_prefix = os.path.join(args.stage_path, 'spt3g_ingest-stage-')
+
+    # You cannot have both --coadds and --preload_coadds
+    if args.coadds is not None and args.preload_coadds is True:
+        raise RuntimeError("Select --coadds or --preload_coadds, but not both")
 
     return args
 

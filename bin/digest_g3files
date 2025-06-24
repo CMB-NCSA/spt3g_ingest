@@ -4,23 +4,13 @@ import argparse
 import logging
 import time
 from spt3g_ingest import ingstools
-from spt3g_ingest import sqltools
-from spt3g_ingest import data_types
 
 
 def cmdline():
 
-    parser = argparse.ArgumentParser(description="FITS ingestion tool")
+    parser = argparse.ArgumentParser(description="g3 files ingestion tool")
     parser.add_argument("files", nargs='+',
                         help="Filename(s) to ingest")
-    # Ingest options
-    parser.add_argument("--replace", action='store_true', default=False,
-                        help="Replace ingest entry")
-    parser.add_argument("--tablename", action='store', default="file_info_v1",
-                        help="Table name with file infomation")
-    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g.db",
-                        help="Name of the sqlite3 database file")
-
     # Logging options (loglevel/log_format/log_format_date)
     default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
     default_log_format_date = '%Y-%m-%d %H:%M:%S'
@@ -46,17 +36,15 @@ if __name__ == "__main__":
 
     logger = logging.getLogger(__name__)
 
-    # Make sure that the DB and table exists
-    sqltools.check_dbtable(args.dbname, args.tablename, con=None, Fd=data_types.Fd)
-
-    # Loop over all of the files
     t0 = time.time()
     nfiles = len(args.files)
     k = 1
-    for fitsfile in args.files:
-        logger.info(f"Ingesting FITS file to DB: {k}/{nfiles} files")
-        sqltools.ingest_fitsfile(fitsfile, args.tablename,
-                                 dbname=args.dbname,
-                                 replace=args.replace)
+    for g3file in args.files:
+        logger.info(f"Digesting g3 file: {k}/{nfiles} files")
+        hdr = ingstools.digest_g3file(g3file)
+        print(f"----- {g3file} -----")
+        for key, value in hdr.items():
+            print(f"{key:8s} : {str(value[0]):41s} / {value[1]}")
+        print("-----")
         k += 1
     logger.info(f"Total time: {ingstools.elapsed_time(t0)}")

@@ -5,6 +5,7 @@ import logging
 import time
 from spt3g_ingest import ingstools
 from spt3g_ingest import sqltools
+from spt3g_ingest import data_types
 
 
 def cmdline():
@@ -15,9 +16,9 @@ def cmdline():
     # Ingest options
     parser.add_argument("--replace", action='store_true', default=False,
                         help="Replace ingest entry")
-    parser.add_argument("--tablename", action='store', default="g3file_info",
+    parser.add_argument("--tablename", action='store', default="g3fileinfo",
                         help="Table name with file infomation")
-    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_raw.db",
+    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_archive.db",
                         help="Name of the sqlite3 database file")
     parser.add_argument("--dryrun", action='store_true', default=False,
                         help="Dry run")
@@ -46,13 +47,16 @@ if __name__ == "__main__":
 
     logger = logging.getLogger(__name__)
 
+    # Make sure that the DB and table exists
+    sqltools.check_dbtable(args.dbname, args.tablename, con=None, Fd=data_types.g3Fd)
+
     t0 = time.time()
     nfiles = len(args.files)
     k = 1
     for g3file in args.files:
         logger.info(f"Ingesting g3 file to DB: {k}/{nfiles} files")
         hdr = ingstools.digest_g3file(g3file)
-        sqltools.ingest_g3file(hdr, args.tablename,
+        sqltools.ingest_g3file(g3file, hdr, args.tablename,
                                dbname=args.dbname,
                                dryrun=args.dryrun,
                                replace=args.replace)
