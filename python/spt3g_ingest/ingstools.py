@@ -1371,5 +1371,4 @@ def get_archive_root():
 def get_coadd_archive_path():
     archive_root = get_archive_root()
     coadds_path = os.path.join(archive_root, "archive/transients-coadds")
-    print(coadds_path)
     return coadds_path
