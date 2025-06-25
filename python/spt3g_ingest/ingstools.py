@@ -23,6 +23,7 @@ import math
 import astropy
 from astropy.nddata import Cutout2D
 import pandas as pd
+import socket
 
 # The filetype extensions for file types
 # FILETYPE_SUFFIX = {'filtered': 'fltd', 'passthrough': 'psth'}
@@ -1355,6 +1356,20 @@ def load_coadd_frame(g3coaddfile, g3coadds=None,
         return g3coadd_frame
 
 
+def get_archive_root():
+    address = socket.getfqdn()
+    if address.find('spt3g') >= 0:
+        archive_root = '/data/spt3g'
+    elif address.find('campuscluster') >= 0:
+        archive_root = '/projects/ncsa/caps/spt3g'
+    else:
+        archive_root = ''
+        logger.warning(f"archive_root undefined for: {address}")
+    return archive_root
+
+
 def get_coadd_archive_path():
-    coadds_path = "/data/spt3g/archive/transients-coadds"
+    archive_root = get_archive_root()
+    coadds_path = os.path.join(archive_root, "archive/transients-coadds")
+    print(coadds_path)
     return coadds_path
