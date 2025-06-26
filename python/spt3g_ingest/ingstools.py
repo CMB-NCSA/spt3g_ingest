@@ -124,6 +124,7 @@ class g3worker():
         For galaxy observations the coadds are field+band
         """
         df = self.df_query
+
         # Select unique band+field for non spt3g-galaxy season
         df_season = df.loc[df['SEASON'] != 'spt3g-galaxy', ['BAND', 'FIELD', 'SEASON']]
         df_season['KEY'] = df_season['BAND'] + ' ' + df_season['SEASON']
@@ -1291,10 +1292,12 @@ def get_coadd_filename(band, season=None, field=None):
         filename = f"map_coadd_{band}_{short_season}_2019-2023_tonly.g3.gz"
     elif 'wide' in season:
         filename = f"map_coadd_{band}_{short_season}_yearAB_tonly.g3.gz"
+    elif 'summer' in season:
+        filename = f"map_coadd_{band}_{short_season}_2019-2022_tonly.g3"
     elif season == 'spt3g-galaxy':
         filename = f"map_coadd_{band}_{field}_2024_tonly.g3.gz"
     else:
-        print(f"Cannot find filename for {band}/{season}")
+        logger.warning(f"Cannot find filename for bans:{band}, season:{season}, field:{field}")
     return filename
 
 
