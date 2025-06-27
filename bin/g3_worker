@@ -79,6 +79,15 @@ def cmdline():
     parser.add_argument("--log_format_date", action="store", type=str, default=default_log_format_date,
                         help="Format for date section of logging")
 
+    # Check run database
+    parser.add_argument("--run_dbname", action='store', default="/data/spt3g/dblib/spt3g_runs.db",
+                        help="Name of the sqlite3 database with runs")
+    parser.add_argument("--run_tablename", action='store', default="g3runinfo",
+                        help="Table name with file run infomation")
+    parser.add_argument("--run_check", action='store_true', default=False,
+                        help="Check if files have been run against the Runs database")
+    parser.add_argument("--run_insert", action='store_true', default=False,
+                        help="Insert run of file into the Runs database")
     # Use multiprocessing
     parser.add_argument("--np", action="store", default=1, type=int,
                         help="Run using multi-process, 0=automatic, 1=single-process [default]")

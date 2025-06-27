@@ -8,6 +8,7 @@ import logging
 import re
 import time
 import hashlib
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ def connect_db(dbname, tablename='FILE_INFO_V0', Fd=data_types.Fd):
 
 def check_dbtable(dbname, tablename, con=None, Fd=data_types.Fd):
     """ Check if tablename exists in database"""
-    logger.info(f"Checking if {tablename} exits in: {dbname}")
+    logger.info(f"Checking if table: {tablename} exits in DB: {dbname}")
     # Connect to DB, make new connection if not available
     if not con:
         close_con = True
@@ -182,7 +183,7 @@ def ingest_fitsfile(fitsfile, tablename, dbname=None, replace=False):
                                   'tablename': tablename, 'values': vvv})
 
     logger.debug(f"Executing:{query}")
-    execute_with_retry(fitsfile, query, dbname, max_retries=10)
+    commit_with_retry(fitsfile, query, dbname, max_retries=10)
 
 
 def ingest_g3file(g3file, header, tablename, dbname=None, replace=False, dryrun=False):
@@ -229,7 +230,7 @@ def ingest_g3file(g3file, header, tablename, dbname=None, replace=False, dryrun=
     if dryrun:
         logger.info(f"DRYRUN: {query}")
     else:
-        execute_with_retry(g3file, query, dbname, max_retries=10)
+        commit_with_retry(g3file, query, dbname, max_retries=10)
 
 
 def compute_md5_and_size(g3file):
@@ -246,7 +247,7 @@ def compute_md5_and_size(g3file):
     return size, md5.hexdigest()
 
 
-def execute_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):
+def commit_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):
     for attempt in range(max_retries):
         try:
             con = sqlite3.connect(dbname)
@@ -262,6 +263,24 @@ def execute_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):
             if attempt < max_retries - 1:
                 logger.warning(f"WARNING: ingestion {attempt}/{max_retries} failed "
                                f"for:{g3file} -- will retry in {retry_delay}[sec]")
+                time.sleep(retry_delay)
+            else:
+                raise e
+        finally:
+            if con:
+                con.close()
+
+
+def query_with_retry(query, dbname, max_retries=3, retry_delay=1):
+    for attempt in range(max_retries):
+        try:
+            con = sqlite3.connect(dbname)
+            df = pd.read_sql_query(query, con)
+            return df
+        except sqlite3.OperationalError as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"WARNING: query: {query} failed "
+                               f"-- will retry in {retry_delay}[sec]")
                 time.sleep(retry_delay)
             else:
                 raise e

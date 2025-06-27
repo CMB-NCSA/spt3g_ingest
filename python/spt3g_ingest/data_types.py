@@ -74,3 +74,13 @@ g3Fd['FIELD'] = 'VARCHAR(30)'
 g3Fd['SEASON'] = 'VARCHAR(30)'
 g3Fd['OBSID'] = 'VARCHAR(100)'
 g3Fd['BAND'] = 'VARCHAR(10)'
+
+# For the run table
+g3RunFd = OrderedDict()
+g3RunFd['ID'] = 'TEXT'
+g3RunFd['PSTH'] = 'INT'
+g3RunFd['FLTD'] = 'INT'
+g3RunFd['CFLTD'] = 'INT'
+g3RunFd['DATE_PSTH'] = 'TEXT'
+g3RunFd['DATE_FLTD'] = 'TEXT'
+g3RunFd['DATE_CFLTD'] = 'TEXT'

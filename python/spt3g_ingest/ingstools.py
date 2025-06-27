@@ -24,6 +24,8 @@ import astropy
 from astropy.nddata import Cutout2D
 import pandas as pd
 import socket
+import spt3g_ingest.data_types as data_types
+
 
 # The filetype extensions for file types
 # FILETYPE_SUFFIX = {'filtered': 'fltd', 'passthrough': 'psth'}
@@ -265,9 +267,11 @@ class g3worker():
         # Set the number of threads for numexpr
         self.set_nthreads()
 
-        # Check DB table exists
+        # Check DB tables exists
         if self.config.ingest:
             sqltools.check_dbtable(self.config.dbname, self.config.tablename)
+        if self.config.run_check or self.config.run_insert:
+            sqltools.check_dbtable(self.config.run_dbname, self.config.run_tablename, Fd=data_types.g3RunFd)
 
     def precook_g3file(self, g3file):
         """Perform tasks need for each g3file to be worked on"""
@@ -382,10 +386,16 @@ class g3worker():
     def g3_to_fits(self, g3file, overwrite=False, fitsfile=None, trim=True):
         """ Dump g3file as fits"""
 
+        t0 = time.time()
         if self.NP > 1:
             self.setup_logging()
 
-        t0 = time.time()
+        # Before we proceed any further, we check against DB or runs
+        filetype = 'PSTH'
+        if self.config.run_check and self.check_run_g3file(g3file, filetype):
+            self.logger.info(f"Skipping: {os.path.basename(g3file)} already processed for {filetype}")
+            return
+
         # Pre-cook the g3file
         self.precook_g3file(g3file)
 
@@ -494,6 +504,10 @@ class g3worker():
                                      dbname=self.config.dbname,
                                      replace=self.config.replace)
 
+        # Insert into the runs DB
+        if self.config.run_insert:
+            self.ingest_run_g3file(g3file, 'PSTH')
+
         return
 
     def g3_transient_filter(self, g3file, trim=True, subtract_coadd=False):
@@ -503,6 +517,20 @@ class g3worker():
         if self.NP > 1:
             self.setup_logging()
         t0 = time.time()
+
+        # Define output names
+        if subtract_coadd is True:
+            suffix = FILETYPE_SUFFIX['coaddfiltered']
+            filetype = 'CFLTD'
+        else:
+            suffix = FILETYPE_SUFFIX['filtered']
+            filetype = 'FLTD'
+
+        # Before we proceed any further, we check against DB or runs
+        if self.config.run_check and self.check_run_g3file(g3file, filetype):
+            self.logger.info(f"Skipping: {os.path.basename(g3file)} already processed for {filetype}")
+            return
+
         # Pre-cook the g3file
         self.precook_g3file(g3file)
 
@@ -511,11 +539,6 @@ class g3worker():
             outname_keep = {}  # dict to keep the actual output names
             tmp_dir = mkdtemp(prefix=self.config.indirect_write_prefix)
 
-        # Define output names
-        if subtract_coadd is True:
-            suffix = FILETYPE_SUFFIX['coaddfiltered']
-        else:
-            suffix = FILETYPE_SUFFIX['filtered']
         outname = {}
         skipfile = {}
         for ft in self.config.output_filetypes:
@@ -618,6 +641,10 @@ class g3worker():
                 outname[ft] = outname_keep[ft]
                 self.logger.info(f"Created file: {outname[ft]}")
 
+        # Insert into the runs DB
+        if self.config.run_insert:
+            self.ingest_run_g3file(g3file, filetype)
+
         self.logger.info(f"Total time: {elapsed_time(t0)} for Filtering: {g3file}")
         return
 
@@ -665,6 +692,42 @@ class g3worker():
             self.nthread = self.config.ntheads
         ne.set_num_threads(self.nthread)
         self.logger.info(f"Set the number of threads for numexpr as {self.nthread}")
+
+    def check_run_g3file(self, g3file, filetype):
+        """Check if file has been run before"""
+        g3file = os.path.basename(g3file)
+        query = f"SELECT {filetype} FROM g3runinfo WHERE ID = '{g3file}'"
+        self.logger.debug(f"run_check query: {query}")
+        df = sqltools.query_with_retry(query, self.config.run_dbname)
+        if df.empty:
+            # False empty
+            return False
+        elif df[filetype][0] == 1:
+            return True
+        else:
+            # False null"
+            return False
+
+    def ingest_run_g3file(self, g3file, filetype):
+
+        query_template = """
+        INSERT INTO {tablename} (ID, {filetype}, DATE_{filetype})
+        VALUES ('{g3file}', 1, '{date}')
+        ON CONFLICT(ID) DO UPDATE SET
+            {filetype} = excluded.{filetype},
+            DATE_{filetype} = excluded.DATE_{filetype}
+        """
+
+        g3file = os.path.basename(g3file)
+        date = Time.now().isot
+        # filename = os.path.basename(filename)
+        query = query_template.format(**{'tablename': self.config.run_tablename,
+                                         'g3file': g3file,
+                                         'filetype': filetype,
+                                         'date': date})
+        print(query)
+        sqltools.commit_with_retry(g3file, query, self.config.run_dbname)
+        self.logger.info(f"Inserted {g3file} -- {filetype}")
 
 
 def pre_populate_metadata(metadata=None):
