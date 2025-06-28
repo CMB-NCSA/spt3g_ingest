@@ -725,7 +725,7 @@ class g3worker():
                                          'g3file': g3file,
                                          'filetype': filetype,
                                          'date': date})
-        print(query)
+        self.logger.debug(query)
         sqltools.commit_with_retry(g3file, query, self.config.run_dbname)
         self.logger.info(f"Inserted {g3file} -- {filetype}")
 
