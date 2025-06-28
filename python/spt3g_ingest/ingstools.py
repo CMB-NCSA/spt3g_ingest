@@ -396,14 +396,6 @@ class g3worker():
             self.logger.info(f"Skipping: {os.path.basename(g3file)} already processed for {filetype}")
             return
 
-        # Pre-cook the g3file
-        self.precook_g3file(g3file)
-
-        # Define fitsfile name only if undefined
-        if fitsfile is None:
-            suffix = FILETYPE_SUFFIX['passthrough']
-            fitsfile = self.set_outname(g3file, suffix=suffix, filetype="FITS")
-
         # Skip if fitsfile exists and overwrite/clobber not True
         # Note that if skip is False we proceed, and therefore will overwrite
         # the fitsfile. That why we set overwrite=True in the save_skymap_fits
@@ -412,9 +404,13 @@ class g3worker():
             self.logger.warning(f"File already exists, skipping: {fitsfile}")
             return
 
-        if self.hdr[g3file]['BAND'][0] not in self.config.band:
-            self.logger.warning(f"Skipping: {g3file} not in selected bands")
-            return
+        # Pre-cook the g3file
+        self.precook_g3file(g3file)
+
+        # Define fitsfile name only if undefined
+        if fitsfile is None:
+            suffix = FILETYPE_SUFFIX['passthrough']
+            fitsfile = self.set_outname(g3file, suffix=suffix, filetype="FITS")
 
         # Make a copy of the header to modify
         hdr = copy.deepcopy(self.hdr[g3file])
@@ -506,7 +502,7 @@ class g3worker():
 
         # Insert into the runs DB
         if self.config.run_insert:
-            self.ingest_run_g3file(g3file, 'PSTH')
+            self.ingest_run_g3file(g3file, filetype)
 
         return
 
@@ -531,9 +527,8 @@ class g3worker():
             self.logger.info(f"Skipping: {os.path.basename(g3file)} already processed for {filetype}")
             return
 
-        # Pre-cook the g3file
-        self.precook_g3file(g3file)
-
+        # Define outnames and see if we need to skip them, we do this before precooking
+        # the g3 files
         # Create tmp folder and dict with names to keepmif indirect_write
         if self.config.indirect_write:
             outname_keep = {}  # dict to keep the actual output names
@@ -553,6 +548,21 @@ class g3worker():
                 self.logger.info(f"Will use indirect_write to: {outname[ft]}")
                 # Make sure that the folder exists:
                 create_dir(os.path.dirname(outname[ft]))
+
+        # See if we need to skip running
+        output_filetypes_run = copy.deepcopy(self.config.output_filetypes)
+        for ft in self.config.output_filetypes:
+            if skipfile[ft] is True:
+                output_filetypes_run.remove(ft)
+        # Return if nothing to do
+        if len(output_filetypes_run) == 0:
+            self.logger.warning("No output_filetypes left to run")
+            if self.config.indirect_write:
+                shutil.rmtree(tmp_dir)
+            return
+
+        # Pre-cook the g3file
+        self.precook_g3file(g3file)
 
         # Make a copy of the header to modify
         hdr = copy.deepcopy(self.hdr[g3file])
@@ -609,11 +619,11 @@ class g3worker():
                  field=self.field_season[g3file],
                  compute_snr_annulus=self.config.compute_snr_annulus)
 
-        if 'G3' in self.config.output_filetypes:
+        if 'G3' in output_filetypes_run:
             self.logger.info(f"Preparing to write G3: {outname['G3']}")
             pipe.Add(core.G3Writer, filename=outname['G3'])
 
-        if 'FITS' in self.config.output_filetypes:
+        if 'FITS' in output_filetypes_run:
             self.logger.info(f"Preparing to write FITS: {outname['FITS']}")
             pipe.Add(maps.RemoveWeights, zero_nans=True)
             pipe.Add(remove_g3_units, units=core.G3Units.mJy)
@@ -640,6 +650,7 @@ class g3worker():
                 shutil.move(outname[ft], outname_keep[ft])
                 outname[ft] = outname_keep[ft]
                 self.logger.info(f"Created file: {outname[ft]}")
+            shutil.rmtree(tmp_dir)
 
         # Insert into the runs DB
         if self.config.run_insert:
