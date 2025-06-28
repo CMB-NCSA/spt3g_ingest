@@ -26,7 +26,19 @@ def extract_names_from_file(file_path, suffix='psth'):
     return names
 
 
-# Example usage:
+# To run:
+
+# cd /data/spt3g/dblib
+
+# insert_run_manual.py run1_psth.files psth
+# insert_run_manual.py run1_fltd.files fltd
+# insert_run_manual.py run1_cfltd.files cfltd
+
+# insert_run_manual.py run2_psth.files psth
+# insert_run_manual.py run2_fltd.files fltd
+# insert_run_manual.py run2_cfltd.files cfltd
+
+
 run_files = sys.argv[1]
 try:
     filetype = sys.argv[2]
@@ -51,7 +63,7 @@ ON CONFLICT(ID) DO UPDATE SET
 """
 
 nfiles = len(g3names)
-k = 0
+k = 1
 for g3file in g3names:
     date = Time.now().isot
     print(f"Doing {k}/{nfiles} -- {g3file}")
