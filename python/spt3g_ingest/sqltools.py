@@ -99,10 +99,13 @@ def extract_values_header(header, Fd=data_types.Fd):
     return values
 
 
-def create_con(dbname):
+def create_con(dbname, read_only=False):
     """Establish connection to DB"""
     logger.info(f"Establishing DB connection to: {dbname}")
-    con = sqlite3.connect(dbname)
+    if read_only:
+        con = sqlite3.connect(f'file:{dbname}?mode=ro', uri=True)
+    else:
+        con = sqlite3.connect(dbname)
     return con
 
 

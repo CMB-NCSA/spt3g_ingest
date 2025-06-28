@@ -101,7 +101,7 @@ class g3worker():
         else:
             dbname = self.config.dbname
 
-        con = sqltools.create_con(dbname)
+        con = sqltools.create_con(dbname, read_only=True)
         # Build the query:
         query = sqltools.get_query_field_seasons(self.config.tablename, files=self.config.files)
         self.logger.info("Running query to find seasons and fields for input files")

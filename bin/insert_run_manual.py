@@ -26,18 +26,23 @@ def extract_names_from_file(file_path, suffix='psth'):
     return names
 
 
-# To run:
+"""
+To run:
 
-# cd /data/spt3g/dblib
+cd /data/spt3g/dblib
 
-# insert_run_manual.py run1_psth.files psth
-# insert_run_manual.py run1_fltd.files fltd
-# insert_run_manual.py run1_cfltd.files cfltd
+insert_run_manual.py run1_psth.files psth
+insert_run_manual.py run1_fltd.files fltd
+insert_run_manual.py run1_cfltd.files cfltd
 
-# insert_run_manual.py run2_psth.files psth
-# insert_run_manual.py run2_fltd.files fltd
-# insert_run_manual.py run2_cfltd.files cfltd
+ls  2020/2020-*/*psth.fits > ~/run2_psth.files
+ls  2020/2020-*/*cfltd.fits > ~/run2_cfltd.files
+ls  2020/2020-*/*fltd.fits > ~/run2_fltd.files
 
+insert_run_manual.py run2_psth.files psth
+insert_run_manual.py run2_fltd.files fltd
+insert_run_manual.py run2_cfltd.files cfltd
+"""
 
 run_files = sys.argv[1]
 try:
@@ -66,7 +71,7 @@ nfiles = len(g3names)
 k = 1
 for g3file in g3names:
     date = Time.now().isot
-    print(f"Doing {k}/{nfiles} -- {g3file}")
+    print(f"Doing {k}/{nfiles} {filetype} -- {g3file}")
     query = query_template.format(**{'tablename': tablename,
                                      'g3file': g3file,
                                      'filetype': filetype,

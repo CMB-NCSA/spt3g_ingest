@@ -10,6 +10,7 @@ from spt3g_ingest import ingstools
 def cmdline():
 
     all_bands = ["90GHz", "150GHz", "220GHz"]
+    archive_root = ingstools.get_archive_root()
     parser = argparse.ArgumentParser(description="spt3g filtering and ingestion tool")
     parser.add_argument("files", nargs='+',
                         help="Filename(s) to ingest")
@@ -51,7 +52,7 @@ def cmdline():
                         help="Replace ingest entry")
     parser.add_argument("--tablename", action='store', default="g3fileinfo",
                         help="Table name with file infomation")
-    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_archive.db",
+    parser.add_argument("--dbname", action='store', default=f"{archive_root}/dblib/spt3g_archive.db",
                         help="Name of the sqlite3 database file")
 
     # Read options
@@ -80,7 +81,7 @@ def cmdline():
                         help="Format for date section of logging")
 
     # Check run database
-    parser.add_argument("--run_dbname", action='store', default="/data/spt3g/dblib/spt3g_runs.db",
+    parser.add_argument("--run_dbname", action='store', default=f"{archive_root}/dblib/spt3g_runs.db",
                         help="Name of the sqlite3 database with runs")
     parser.add_argument("--run_tablename", action='store', default="g3runinfo",
                         help="Table name with file run infomation")
