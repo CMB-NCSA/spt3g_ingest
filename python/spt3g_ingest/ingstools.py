@@ -396,14 +396,6 @@ class g3worker():
             self.logger.info(f"Skipping: {os.path.basename(g3file)} already processed for {filetype}")
             return
 
-        # Skip if fitsfile exists and overwrite/clobber not True
-        # Note that if skip is False we proceed, and therefore will overwrite
-        # the fitsfile. That why we set overwrite=True in the save_skymap_fits
-        # functions
-        if self.skip_filename(fitsfile):
-            self.logger.warning(f"File already exists, skipping: {fitsfile}")
-            return
-
         # Pre-cook the g3file
         self.precook_g3file(g3file)
 
@@ -411,6 +403,14 @@ class g3worker():
         if fitsfile is None:
             suffix = FILETYPE_SUFFIX['passthrough']
             fitsfile = self.set_outname(g3file, suffix=suffix, filetype="FITS")
+
+        # Skip if fitsfile exists and overwrite/clobber not True
+        # Note that if skip is False we proceed, and therefore will overwrite
+        # the fitsfile. That why we set overwrite=True in the save_skymap_fits
+        # functions
+        if self.skip_filename(fitsfile):
+            self.logger.warning(f"File already exists, skipping: {fitsfile}")
+            return
 
         # Make a copy of the header to modify
         hdr = copy.deepcopy(self.hdr[g3file])
@@ -527,6 +527,9 @@ class g3worker():
             self.logger.info(f"Skipping: {os.path.basename(g3file)} already processed for {filetype}")
             return
 
+        # Pre-cook the g3file
+        self.precook_g3file(g3file)
+
         # Define outnames and see if we need to skip them, we do this before precooking
         # the g3 files
         # Create tmp folder and dict with names to keepmif indirect_write
@@ -560,9 +563,6 @@ class g3worker():
             if self.config.indirect_write:
                 shutil.rmtree(tmp_dir)
             return
-
-        # Pre-cook the g3file
-        self.precook_g3file(g3file)
 
         # Make a copy of the header to modify
         hdr = copy.deepcopy(self.hdr[g3file])
