@@ -156,7 +156,7 @@ def ingest_fitsfile(fitsfile, tablename, dbname=None, replace=False):
 
     logger.info(f"Ingesting: {fitsfile} to: {tablename}")
 
-    # Read in the header
+    # Read in the header -- we get it in astropy format
     header = read_header(fitsfile)
     # Fix the keywords in the header
     header = fix_fits_keywords(header)

@@ -13,7 +13,7 @@ archive_root = "/data/spt3g/"
 
 
 def compute_size(row):
-    """Compute full path, size, and MD5 for one file."""
+    """Compute full path, size for one file."""
     id_, filepath, filename = row
     full_path = os.path.join(archive_root, filepath, filename)
 

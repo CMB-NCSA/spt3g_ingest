@@ -416,7 +416,7 @@ class g3worker():
         hdr = copy.deepcopy(self.hdr[g3file])
         # Populate additional metadata for DB
         hdr['FITSNAME'] = (os.path.basename(fitsfile), 'Name of fits file')
-        hdr['FILETYPE'] = ('passthrough', 'The file type')
+        hdr['FILETYPE'] = ('PSTH', 'The file type')
         hdr['PARENT'] = (os.path.basename(g3file), 'Name of parent file')
         # Get the metadata/hdr into an astropy Header object
         hdr = metadata_to_astropy_header(hdr)
@@ -569,7 +569,7 @@ class g3worker():
         # Populate additional metadata for DB
         if 'FITS' in self.config.output_filetypes:
             hdr['FITSNAME'] = (os.path.basename(outname['FITS']), 'Name of fits file')
-        hdr['FILETYPE'] = ('filtered', 'The file type')
+        hdr['FILETYPE'] = (filetype, 'The file type')
         hdr['PARENT'] = (os.path.basename(g3file), 'Name of parent file')
         # The UNITS
         hdr['BUNIT'] = ('mJy', 'Flux is in [mJy]')
