@@ -3,6 +3,7 @@
 import argparse
 import logging
 import time
+from tqdm import tqdm
 from spt3g_ingest import ingstools
 from spt3g_ingest import sqltools
 from spt3g_ingest import data_types
@@ -16,9 +17,9 @@ def cmdline():
     # Ingest options
     parser.add_argument("--replace", action='store_true', default=False,
                         help="Replace ingest entry")
-    parser.add_argument("--tablename", action='store', default="fits_fileinfo",
+    parser.add_argument("--tablename", action='store', default="fitsinfo",
                         help="Table name with file infomation")
-    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g.db",
+    parser.add_argument("--dbname", action='store', default="/data/spt3g/dblib/spt3g_products.db",
                         help="Name of the sqlite3 database file")
 
     # Logging options (loglevel/log_format/log_format_date)
@@ -52,11 +53,15 @@ if __name__ == "__main__":
     # Loop over all of the files
     t0 = time.time()
     nfiles = len(args.files)
-    k = 1
-    for fitsfile in args.files:
-        logger.info(f"Ingesting FITS file to DB: {k}/{nfiles} files")
-        sqltools.ingest_fitsfile(fitsfile, args.tablename,
-                                 dbname=args.dbname,
-                                 replace=args.replace)
-        k += 1
+
+    with tqdm(total=nfiles, desc="Ingesting FITS files", unit="file", colour='green') as pbar:
+        k = 1
+        for fitsfile in args.files:
+            msg = f"\rIngesting FITS file to DB: {k}/{nfiles} files\r"
+            sqltools.ingest_fitsfile(fitsfile, args.tablename,
+                                     dbname=args.dbname,
+                                     replace=args.replace)
+            pbar.update(1)
+            k += 1
+
     logger.info(f"Total time: {ingstools.elapsed_time(t0)}")

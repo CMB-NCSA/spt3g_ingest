@@ -146,7 +146,7 @@ def check_dbtable(dbname, tablename, con=None, Fd=data_types.Fd):
     return
 
 
-def ingest_fitsfile(fitsfile, tablename, dbname=None, replace=False):
+def ingest_fitsfile(fitsfile, tablename, dbname=None, replace=False, log=None):
     """ Ingest file into an sqlite3 table"""
 
     if replace:
@@ -154,10 +154,11 @@ def ingest_fitsfile(fitsfile, tablename, dbname=None, replace=False):
     else:
         or_replace = ' '
 
-    logger.info(f"Ingesting: {fitsfile} to: {tablename}")
+    logger.debug(f"Ingesting: {fitsfile} to: {tablename}")
 
     # Read in the header -- we get it in astropy format
     header = read_header(fitsfile)
+
     # Fix the keywords in the header
     header = fix_fits_keywords(header)
 
@@ -167,13 +168,16 @@ def ingest_fitsfile(fitsfile, tablename, dbname=None, replace=False):
     FILEPATH = os.path.dirname(fitsfile)
     INGESTION_DATE = Time.now().isot
 
+    # Get file size and md5sum
+    header['SIZEINBYTES'], header['MD5SUM'] = compute_md5_and_size(fitsfile)
+    header['INGESTION_DATE'] = INGESTION_DATE
+    header['FILENAME'] = FILENAME
+    header['FILEPATH'] = FILEPATH
+    header['ID'] = ID
+
     # Create the ingested values in the same order,
     # starting for those 3 keys by hand
     values = []
-    values.append(ID)  # ID
-    values.append(FILENAME)  # FILENAME
-    values.append(FILEPATH)  # FILEPATH
-    values.append(INGESTION_DATE)  # INGESTION_DATE
     values = values + extract_values_header(header)
 
     # Convert the values into a long string
@@ -257,7 +261,7 @@ def commit_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):
             cursor = con.cursor()
             cursor.execute(query)
             con.commit()
-            logger.info(f"Ingestion Done for: {g3file}")
+            logger.debug(f"Ingestion Done for: {g3file}")
             return
         except sqlite3.IntegrityError:
             logger.warning(f"NOT UNIQUE: ingestion failed for {g3file}")
