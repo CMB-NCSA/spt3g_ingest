@@ -1094,7 +1094,7 @@ def remove_staged_file(file):
     shutil.rmtree(tmp_dir)
 
 
-def relocate_g3file(g3file, outdir, symlink=False, dryrun=False, manifest=None):
+def relocate_g3file(g3file, outdir, ingest=False, symlink=False, dryrun=False, manifest=None):
     "Function to relcate a g3 file by date"
     # Get the metadata for folder information
     hdr = digest_g3file(g3file)
@@ -1106,9 +1106,17 @@ def relocate_g3file(g3file, outdir, symlink=False, dryrun=False, manifest=None):
     path = os.path.join(folder_year, folder_date)
     dirname = os.path.join(outdir, path)
 
+    # Repack header to astropy format
+    for key in hdr.keys():
+        hdr[key] = hdr[key][0]
+
     # We need to tweak the FILEPATH keyword in the header with
     # the final location
-    hdr['FILEPATH'] = (f"{path}", "Folder path based on date-obs")
+    hdr['FILEPATH'] = f"{path}"
+
+    # Get file size and md5sum
+    if ingest:
+        hdr['SIZEINBYTES'], hdr['MD5SUM'] = sqltools.compute_md5_and_size(g3file)
 
     if manifest is not None:
         manifest.write(f"{g3file} {dirname}\n")

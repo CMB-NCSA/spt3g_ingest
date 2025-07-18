@@ -196,10 +196,6 @@ def ingest_fitsfile(fitsfile, tablename, dbname=None, replace=False, log=None):
 def ingest_g3file(g3file, header, tablename, dbname=None, replace=False, dryrun=False):
     """ Ingest file into an sqlite3 table"""
 
-    # Repack header to astropy format
-    for key in header.keys():
-        header[key] = header[key][0]
-
     if replace:
         or_replace = ' OR REPLACE '
     else:
@@ -213,9 +209,6 @@ def ingest_g3file(g3file, header, tablename, dbname=None, replace=False, dryrun=
 
     header['INGESTION_DATE'] = INGESTION_DATE
     header['FILETYPE'] = 'rawmap'
-
-    # Get file size and md5sum
-    header['SIZEINBYTES'], header['MD5SUM'] = compute_md5_and_size(g3file)
 
     # Replace '-' with "_"
     header = fix_fits_keywords(header)

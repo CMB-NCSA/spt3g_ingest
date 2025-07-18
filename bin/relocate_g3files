@@ -69,6 +69,7 @@ if __name__ == "__main__":
     for g3file in args.files:
         logger.info(f"Relocating: {k}/{nfiles} files")
         hdr = ingstools.relocate_g3file(g3file, args.outdir,
+                                        ingest=args.ingest,
                                         symlink=args.symlink,
                                         dryrun=args.dryrun,
                                         manifest=manifest)
