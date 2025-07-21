@@ -3,6 +3,7 @@
 import argparse
 import logging
 import time
+import os
 from spt3g_ingest import ingstools
 from spt3g_ingest import sqltools
 from spt3g_ingest import data_types
@@ -55,7 +56,17 @@ if __name__ == "__main__":
     k = 1
     for g3file in args.files:
         logger.info(f"Ingesting g3 file to DB: {k}/{nfiles} files")
-        hdr = ingstools.digest_g3file(g3file)
+
+        # In case we don't want to repleace
+        if not args.replace:
+            ID = os.path.basename(g3file).split('.g3')[0]
+            ID_exists = sqltools.id_exists(args.dbname, args.tablename, 'ID', ID)
+            if ID_exists:
+                logger.info(f"{ID} already in DB -- ignoring")
+                k += 1
+                continue
+
+        hdr = ingstools.digest_g3file(g3file, return_dict=True)
         sqltools.ingest_g3file(g3file, hdr, args.tablename,
                                dbname=args.dbname,
                                dryrun=args.dryrun,

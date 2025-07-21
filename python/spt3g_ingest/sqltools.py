@@ -206,9 +206,10 @@ def ingest_g3file(g3file, header, tablename, dbname=None, replace=False, dryrun=
 
     # Extra metadata for ingestion
     INGESTION_DATE = Time.now().isot
-
     header['INGESTION_DATE'] = INGESTION_DATE
     header['FILETYPE'] = 'rawmap'
+    # Size and md5sum
+    header['SIZEINBYTES'], header['MD5SUM'] = compute_md5_and_size(g3file)
 
     # Replace '-' with "_"
     header = fix_fits_keywords(header)
@@ -287,6 +288,35 @@ def query_with_retry(query, dbname, max_retries=3, retry_delay=1):
         finally:
             if con:
                 con.close()
+
+
+def id_exists(dbname, tablename, id_column, id_value, read_only=True):
+    """
+    Check if a UNIQUE ID exists in a given table of a SQLite3 database (read-only mode).
+
+    Parameters:
+        dbname (str): Path to the SQLite database file.
+        tablename (str): Name of the table to search.
+        id_column (str): Name of the column that holds the ID.
+        id_value (any): The value of the ID to check.
+
+    Returns:
+        bool: True if the ID exists, False otherwise.
+    """
+    con = create_con(dbname, read_only=read_only)
+    cursor = con.cursor()
+    query = f"SELECT 1 FROM {tablename} WHERE {id_column} = ? LIMIT 1"
+
+    try:
+        cursor.execute(query, (id_value,))
+        result = cursor.fetchone()
+        return result is not None
+    except sqlite3.Error as e:
+        print(f"SQLite error: {e}")
+        return False
+    finally:
+        if con:
+            con.close()
 
 
 def get_query_field_seasons(tablename, files=[]):

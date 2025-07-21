@@ -1098,6 +1098,9 @@ def relocate_g3file(g3file, outdir, ingest=False, symlink=False, dryrun=False, m
     "Function to relcate a g3 file by date"
     # Get the metadata for folder information
     hdr = digest_g3file(g3file)
+    # Repack header to astropy format
+    hdr = metadata_to_astropy_header(hdr)
+
     # field_name = hdr['FIELD'][0]
     folder_year = get_folder_year(hdr)
     folder_date = get_folder_date(hdr)
@@ -1106,17 +1109,9 @@ def relocate_g3file(g3file, outdir, ingest=False, symlink=False, dryrun=False, m
     path = os.path.join(folder_year, folder_date)
     dirname = os.path.join(outdir, path)
 
-    # Repack header to astropy format
-    for key in hdr.keys():
-        hdr[key] = hdr[key][0]
-
     # We need to tweak the FILEPATH keyword in the header with
     # the final location
     hdr['FILEPATH'] = f"{path}"
-
-    # Get file size and md5sum
-    if ingest:
-        hdr['SIZEINBYTES'], hdr['MD5SUM'] = sqltools.compute_md5_and_size(g3file)
 
     if manifest is not None:
         manifest.write(f"{g3file} {dirname}\n")
@@ -1143,7 +1138,7 @@ def relocate_g3file(g3file, outdir, ingest=False, symlink=False, dryrun=False, m
     return hdr
 
 
-def digest_g3file(g3file):
+def digest_g3file(g3file, return_dict=False):
     "Function to digest a g3 file"
     # Get the metadata for folder information
     hdr = get_metadata(g3file)
@@ -1158,6 +1153,11 @@ def digest_g3file(g3file):
     filepath = filepath.replace(string_to_remove_caps, "")
     filepath = filepath.replace(string_to_remove_icc, "")
     hdr['FILEPATH'] = (filepath, 'The Filepath')
+    if return_dict:
+        newhdr = {}
+        for key, value in hdr.items():
+            newhdr[key] = value[0]
+        hdr = newhdr
     return hdr
 
 
