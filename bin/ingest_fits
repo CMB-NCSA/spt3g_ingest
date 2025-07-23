@@ -7,6 +7,7 @@ from tqdm import tqdm
 from spt3g_ingest import ingstools
 from spt3g_ingest import sqltools
 from spt3g_ingest import data_types
+import os
 
 
 def cmdline():
@@ -58,6 +59,15 @@ if __name__ == "__main__":
         k = 1
         for fitsfile in args.files:
             msg = f"\rIngesting FITS file to DB: {k}/{nfiles} files\r"
+            # In case we don't want to repleace
+            if not args.replace:
+                ID = os.path.basename(fitsfile).split('.fits')[0]
+                ID_exists = sqltools.id_exists(args.dbname, args.tablename, 'ID', ID)
+                if ID_exists:
+                    logger.info(f"{ID} already in DB -- ignoring")
+                    k += 1
+                    pbar.update(1)
+                    continue
             sqltools.ingest_fitsfile(fitsfile, args.tablename,
                                      dbname=args.dbname,
                                      replace=args.replace)

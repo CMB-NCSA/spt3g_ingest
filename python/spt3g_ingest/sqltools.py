@@ -99,9 +99,10 @@ def extract_values_header(header, Fd=data_types.Fd):
     return values
 
 
-def create_con(dbname, read_only=False):
+def create_con(dbname, read_only=False, verb=True):
     """Establish connection to DB"""
-    logger.info(f"Establishing DB connection to: {dbname}")
+    if verb:
+        logger.info(f"Establishing DB connection to: {dbname}")
     if read_only:
         con = sqlite3.connect(f'file:{dbname}?mode=ro', uri=True)
     else:
@@ -260,7 +261,7 @@ def commit_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):
         except sqlite3.IntegrityError:
             logger.warning(f"NOT UNIQUE: ingestion failed for {g3file}")
             return
-        except sqlite3.OperationalError as e:
+        except sqlite3.OperationalError or sqlite3.DatabaseError as e:
             if attempt < max_retries - 1:
                 logger.warning(f"WARNING: ingestion {attempt}/{max_retries} failed "
                                f"for:{g3file} -- will retry in {retry_delay}[sec]")
@@ -303,7 +304,7 @@ def id_exists(dbname, tablename, id_column, id_value, read_only=True):
     Returns:
         bool: True if the ID exists, False otherwise.
     """
-    con = create_con(dbname, read_only=read_only)
+    con = create_con(dbname, read_only=read_only, verb=False)
     cursor = con.cursor()
     query = f"SELECT 1 FROM {tablename} WHERE {id_column} = ? LIMIT 1"
 
