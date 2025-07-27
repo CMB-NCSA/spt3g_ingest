@@ -136,8 +136,11 @@ class g3worker():
         for key in keys:
             band, season = key.split()
             name = get_coadd_filename(band, season=season)
-            self.logger.debug(f"Added coadd filename: {name}")
-            self.coadd_filenames.append(name)
+            if name:
+                self.logger.debug(f"Added coadd filename: {name}")
+                self.coadd_filenames.append(name)
+            else:
+                self.logger.warning(f"Could not find coadd name:{name} for {band}/{season}")
 
         # Select unique band+field for spt3g-galaxy fields
         df_field = df.loc[df['SEASON'] == 'spt3g-galaxy', ['BAND', 'FIELD', 'SEASON']]
@@ -146,9 +149,12 @@ class g3worker():
         keys = df_field['KEY'].unique().tolist()
         for key in keys:
             band, season, field = key.split()
-            name = get_coadd_filename(band, season=season, field=field)
-            self.logger.debug(f"Added coadd filename: {name}")
-            self.coadd_filenames.append(name)
+            if name:
+                name = get_coadd_filename(band, season=season, field=field)
+                self.logger.debug(f"Added coadd filename: {name}")
+                self.coadd_filenames.append(name)
+            else:
+                self.logger.warning(f"Could not find coadd name:{name} for {band}/{season}")
 
         # Get the full path
         self.config.coadds = [get_coadd_archive_path() + os.sep + f for f in self.coadd_filenames]
@@ -408,7 +414,7 @@ class g3worker():
         # Note that if skip is False we proceed, and therefore will overwrite
         # the fitsfile. That why we set overwrite=True in the save_skymap_fits
         # functions
-        if self.skip_filename(fitsfile):
+        if self.skip_filename(fitsfile, size=5):
             self.logger.warning(f"File already exists, skipping: {fitsfile}")
             return
 
@@ -541,7 +547,7 @@ class g3worker():
         skipfile = {}
         for ft in self.config.output_filetypes:
             outname[ft] = self.set_outname(g3file, suffix=suffix, filetype=ft)
-            skipfile[ft] = self.skip_filename(outname[ft])
+            skipfile[ft] = self.skip_filename(outname[ft], size=5)
             # Make sure that the folder exists:
             create_dir(os.path.dirname(outname[ft]))
             # Change the path of the output files if indirect_write
@@ -584,6 +590,11 @@ class g3worker():
         # Find the coadd filename
         if subtract_coadd is True:
             g3coaddfile = get_coadd_filename(band, field=field, season=season)
+            # Exit here is there is no g3coaddfile for this field
+            if g3coaddfile is None:
+                self.logger.warning(f"Coadd NOT found for field:{field}, season:{season}")
+                self.logger.warning(f"Skipping coadd filtering for {g3file}")
+                return
             if g3coaddfile in self.g3coadds:
                 self.logger.info(f"Coadd frame ALREADY loaded for: {g3coaddfile}")
             else:
@@ -1380,6 +1391,7 @@ def get_coadd_filename(band, season=None, field=None):
         filename = f"map_coadd_{band}_{field}_2024_tonly.g3.gz"
     else:
         logger.warning(f"Cannot find filename for bans:{band}, season:{season}, field:{field}")
+        filename = None
     return filename
 
 
