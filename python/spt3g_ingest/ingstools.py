@@ -149,6 +149,7 @@ class g3worker():
         keys = df_field['KEY'].unique().tolist()
         for key in keys:
             band, season, field = key.split()
+            name = get_coadd_filename(band, season=season, field=field)
             if name:
                 name = get_coadd_filename(band, season=season, field=field)
                 self.logger.debug(f"Added coadd filename: {name}")
@@ -188,7 +189,7 @@ class g3worker():
         # Loop one to defined the jobs
         for g3file in self.config.files:
             # Avoid small files that make filtering crash
-            if self.skip_g3file(g3file, size=50):
+            if self.skip_g3file(g3file, size=10):
                 continue
             self.logger.info(f"Creating mp.Process for {g3file}")
             fargs = (g3file, k)
@@ -210,7 +211,7 @@ class g3worker():
         k = 1
         for g3file in self.config.files:
             # Avoid small files that make filtering crash
-            if self.skip_g3file(g3file, size=50):
+            if self.skip_g3file(g3file, size=10):
                 continue
             self.run_g3file(g3file, k)
             k += 1
@@ -598,7 +599,7 @@ class g3worker():
             if g3coaddfile in self.g3coadds:
                 self.logger.info(f"Coadd frame ALREADY loaded for: {g3coaddfile}")
             else:
-                self.logger.info(f"Coadd frame NOT loaded for: {g3coaddfile}")
+                self.logger.info(f"Coadd frame NOT YET loaded for: {g3coaddfile}")
                 g3coaddfile_fullpath = os.path.join(get_coadd_archive_path(), g3coaddfile)
                 self.g3coadds[g3coaddfile] = load_coadd_frame(g3coaddfile_fullpath)
                 self.logger.info(f"Coadd LOADED for: {g3coaddfile}")
@@ -670,7 +671,7 @@ class g3worker():
         self.logger.info(f"Total time: {elapsed_time(t0)} for Filtering: {g3file}")
         return
 
-    def skip_g3file(self, g3file, size=50):
+    def skip_g3file(self, g3file, size=10):
         """
         Function to skip rogue/junk g3 files that should no be processed
         """
@@ -1389,6 +1390,8 @@ def get_coadd_filename(band, season=None, field=None):
         filename = f"map_coadd_{band}_{short_season}_2019-2022_tonly.g3"
     elif season == 'spt3g-galaxy':
         filename = f"map_coadd_{band}_{field}_2024_tonly.g3.gz"
+    elif season == 'spt3g-edfs':
+        filename = f"map_coadd_{band}_{short_season}_24nov24_tonly.g3"
     else:
         logger.warning(f"Cannot find filename for bans:{band}, season:{season}, field:{field}")
         filename = None
@@ -1459,8 +1462,10 @@ def get_archive_root():
         archive_root = '/data/spt3g'
     elif address.find('campuscluster') >= 0:
         archive_root = '/projects/ncsa/caps/spt3g'
+    elif address.find('ncsa') >= 0:
+        archive_root = '/projects/ncsa/caps/spt3g'
     else:
-        archive_root = ''
+        archive_root = '/projects/ncsa/caps/spt3g'
         logger.warning(f"archive_root undefined for: {address}")
     return archive_root
 
