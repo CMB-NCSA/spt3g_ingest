@@ -338,3 +338,14 @@ def get_query_field_seasons(tablename, files=[]):
     kw = {'tablename': tablename,
           'in_files': in_files}
     return query_files_template.format(**kw)
+
+
+def get_query_files_ignore_season(tablename, season):
+    """
+    Format query template to get field and seasons
+    """
+
+    query = """
+    select FILENAME, BAND, FIELD, SEASON from {tablename} where SEASON='{season}'
+    """
+    return query.format(tablename=tablename, season=season)

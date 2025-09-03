@@ -90,6 +90,31 @@ class g3worker():
         elif self.config.coadds and self.config.filter_transient_coadd:
             self.load_coadds()
 
+        # Get list of files to ignore
+        if self.config.ignore_season:
+            self.get_files_ignore_season()
+        else:
+            self.files_ignore = None
+
+    def get_files_ignore_season(self):
+
+        # Stage db file in needed
+        if self.config.stage:
+            dbname = stage_file(self.config.dbname, stage_prefix=self.config.stage_prefix)
+        else:
+            dbname = self.config.dbname
+
+        con = sqltools.create_con(dbname, read_only=True)
+        query = sqltools.get_query_files_ignore_season(self.config.tablename,
+                                                       self.config.ignore_season)
+        self.logger.info("Running query to find files all to ignore")
+        self.logger.debug(f"Will run query: {query}")
+        df = pd.read_sql_query(query, con)
+        if len(df) > 0:
+            self.files_ignore = df['FILENAME'].values
+        else:
+            self.files_ignore = None
+
     def get_coadd_seasons(self):
         """
         Query the archive DB to get the coadd file ID/name for each g3 observation
@@ -237,6 +262,13 @@ class g3worker():
         " Run the task(s) for a g3file"
         t0 = time.time()
         self.logger.info(f"Doing: {k}/{self.nfiles} files")
+
+        basename = os.path.basename(g3file)
+        if self.files_ignore is not None and basename in self.files_ignore:
+            self.logger.info(f"Skipping file: {g3file} -- in ignore list")
+            self.logger.info(f"Completed: {k}/{self.nfiles} files")
+            self.logger.info(f"Total time: {elapsed_time(t0)} for: {g3file}")
+            return
 
         # Stage if needed
         if self.config.stage:

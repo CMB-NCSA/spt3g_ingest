@@ -40,11 +40,12 @@ def cmdline():
     parser.add_argument("--compute_snr_annulus", action="store_true", default=False,
                         help="Compute signal to noise maps. The noise is determined from the RMS of "
                         "an annulus around each pixel. The SNR map is then saved to each map frame.")
-
     # Custom field Name
     parser.add_argument("--field_name", type=str, default=None,
                         help="SPT field name (optional) to overide metadata")
-
+    # Ignores season
+    parser.add_argument("--ignore_season", type=str, default=None,
+                        help="SPT season name (optional) to ignore")
     # Ingest options
     parser.add_argument("--ingest", action='store_true', default=False,
                         help="Ingest files")
