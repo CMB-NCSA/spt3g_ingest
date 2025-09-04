@@ -209,8 +209,9 @@ def ingest_g3file(g3file, header, tablename, dbname=None, replace=False, dryrun=
     INGESTION_DATE = Time.now().isot
     header['INGESTION_DATE'] = INGESTION_DATE
     header['FILETYPE'] = 'rawmap'
-    # Size and md5sum
-    header['SIZEINBYTES'], header['MD5SUM'] = compute_md5_and_size(g3file)
+    # Size and md5sum -- only if not already in headers:
+    if 'SIZEINBYTES' not in header and 'MD5SUM' not in header:
+        header['SIZEINBYTES'], header['MD5SUM'] = compute_md5_and_size(g3file)
 
     # Replace '-' with "_"
     header = fix_fits_keywords(header)
@@ -237,6 +238,8 @@ def ingest_g3file(g3file, header, tablename, dbname=None, replace=False, dryrun=
 
 def compute_md5_and_size(g3file):
     """Compute full path, size, and MD5 for one file."""
+
+    logger.debug(f"Computing md5 and size for: {g3file}")
 
     if not os.path.isfile(g3file):
         raise FileNotFoundError(f"File not found: {g3file}")

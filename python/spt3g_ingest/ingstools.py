@@ -25,7 +25,9 @@ from astropy.nddata import Cutout2D
 import pandas as pd
 import socket
 import spt3g_ingest.data_types as data_types
-
+import warnings
+from astropy.io.fits.verify import VerifyWarning
+warnings.filterwarnings("ignore", category=VerifyWarning, message=".*is greater than 8 characters.*")
 
 # The filetype extensions for file types
 # FILETYPE_SUFFIX = {'filtered': 'fltd', 'passthrough': 'psth'}
@@ -897,6 +899,13 @@ def get_metadata(g3file, logger=None):
         logger.warning(f"Cannot get field season for file: {g3file}")
         field_season = ''
     hdr['SEASON'] = (field_season, "Field Season")
+
+    # Size and md5sum -- only if not already in headers:
+    if 'SIZEINBYTES' not in hdr and 'MD5SUM' not in hdr:
+        size, md5 = sqltools.compute_md5_and_size(g3file)
+        hdr['SIZEINBYTES'] = (size, "size in bytes")
+        hdr['MD5SUM'] = (md5, 'MD5SUM')
+
     logger.info(f"Metadata Extraction time: {elapsed_time(t0)}")
     return hdr
 
@@ -928,10 +937,15 @@ def get_folder_date(hdr):
     """
     Extract the folder name based on the observation date
     """
+    # Check if tuple -- fitsio header format, else astropy header
+    if isinstance(hdr['DATE-BEG'], tuple):
+        date = hdr['DATE-BEG'][0]
+    else:
+        date = hdr['DATE-BEG']
     try:
-        folder_date = Time(hdr['DATE-BEG'][0]).strftime("%Y-%m")
+        folder_date = Time(date).strftime("%Y-%m")
     except ValueError:
-        folder_date = hdr['DATE-BEG'][0]
+        folder_date = date
     return folder_date
 
 
@@ -939,10 +953,15 @@ def get_folder_year(hdr):
     """
     Extract the folder year based on the observation date
     """
+    # Check if tuple -- fitsio header format, else astropy header
+    if isinstance(hdr['DATE-BEG'], tuple):
+        date = hdr['DATE-BEG'][0]
+    else:
+        date = hdr['DATE-BEG']
     try:
-        folder_year = Time(hdr['DATE-BEG'][0]).strftime("%Y")
+        folder_year = Time(date).strftime("%Y")
     except ValueError:
-        folder_year = hdr['DATE-BEG'][0][0:4]
+        folder_year = date[0:4]
     return folder_year
 
 
@@ -1142,8 +1161,6 @@ def relocate_g3file(g3file, outdir, ingest=False, symlink=False, dryrun=False, m
     "Function to relcate a g3 file by date"
     # Get the metadata for folder information
     hdr = digest_g3file(g3file)
-    # Repack header to astropy format
-    hdr = metadata_to_astropy_header(hdr)
 
     # field_name = hdr['FIELD'][0]
     folder_year = get_folder_year(hdr)
@@ -1152,6 +1169,9 @@ def relocate_g3file(g3file, outdir, ingest=False, symlink=False, dryrun=False, m
     # path = os.path.join(folder_year, field_name)
     path = os.path.join(folder_year, folder_date)
     dirname = os.path.join(outdir, path)
+
+    # Repack header to astropy format
+    hdr = metadata_to_astropy_header(hdr)
 
     # We need to tweak the FILEPATH keyword in the header with
     # the final location
