@@ -249,7 +249,7 @@ def compute_md5_and_size(g3file):
     return size, md5.hexdigest()
 
 
-def commit_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):
+def commit_with_retry(g3file, query, dbname, max_retries=10, retry_delay=1):
     for attempt in range(max_retries):
         try:
             con = sqlite3.connect(dbname)
@@ -273,10 +273,11 @@ def commit_with_retry(g3file, query, dbname, max_retries=3, retry_delay=1):
                 con.close()
 
 
-def query_with_retry(query, dbname, max_retries=3, retry_delay=1):
+def query_with_retry(query, dbname, max_retries=10, retry_delay=1):
     for attempt in range(max_retries):
         try:
-            con = sqlite3.connect(dbname)
+            # Connect to the database in read-only mode using a URI
+            con = sqlite3.connect(f'file:{dbname}?mode=ro', uri=True)
             df = pd.read_sql_query(query, con)
             return df
         except sqlite3.OperationalError as e:
