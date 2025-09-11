@@ -1445,7 +1445,7 @@ def get_coadd_filename(band, season=None, field=None):
     elif season == 'spt3g-edfs':
         filename = f"map_coadd_{band}_{short_season}_24nov24_tonly.g3"
     else:
-        logger.warning(f"Cannot find filename for bans:{band}, season:{season}, field:{field}")
+        logger.warning(f"Cannot find filename for bands:{band}, season:{season}, field:{field}")
         filename = None
     return filename
 

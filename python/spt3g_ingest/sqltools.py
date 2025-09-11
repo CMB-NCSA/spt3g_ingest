@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Template to insert a row
 _insert_row = """
-INSERT{or_replace}INTO {tablename} values ({values})
+INSERT{or_replace}INTO {tablename} ({columns}) values ({values})
 """
 
 
@@ -81,22 +81,25 @@ def fix_fits_keywords(header):
     return new_header
 
 
-def extract_values_header(header, Fd=data_types.Fd):
+def extract_columns_values_header(header, Fd=data_types.Fd):
 
     # Create the ingested values in the same order,
     # starting for those 3 keys by hand
     values = []
+    columns = []
     for k in Fd.keys():
         try:
             values.append(str(header[k]))
+            columns.append(k)
         except KeyError:
             # These 3 values are now missing from the headers
             if k in ['DATEREF', 'MJDREFI', 'MJDREFF']:
                 values.append(str(None))
+                columns.append(k)
             else:
                 pass
                 logger.debug('{} Not Found'.format(k))
-    return values
+    return columns, values
 
 
 def create_con(dbname, read_only=False, verb=True):
@@ -176,19 +179,16 @@ def ingest_fitsfile(fitsfile, tablename, dbname=None, replace=False, log=None):
     header['FILEPATH'] = FILEPATH
     header['ID'] = ID
 
-    # Create the ingested values in the same order,
-    # starting for those 3 keys by hand
-    values = []
-    values = values + extract_values_header(header)
-
-    # Convert the values into a long string
-    vvv = ''
-    for v in values:
-        vvv += '\"' + v + '\", '
-    vvv = vvv.rstrip(', ')
-
+    columns, values = extract_columns_values_header(header, Fd=data_types.Fd)
+    values_str = ", ".join(
+        f"'{v}'" if isinstance(v, str) else str(v)
+        for v in values
+    )
+    columns_str = ", ".join(columns)
     query = _insert_row.format(**{'or_replace': or_replace,
-                                  'tablename': tablename, 'values': vvv})
+                                  'tablename': tablename,
+                                  'columns': columns_str,
+                                  'values': values_str})
 
     logger.debug(f"Executing:{query}")
     commit_with_retry(fitsfile, query, dbname, max_retries=10)
@@ -213,19 +213,16 @@ def ingest_g3file(g3file, header, tablename, dbname=None, replace=False, dryrun=
     # Replace '-' with "_"
     header = fix_fits_keywords(header)
 
-    # Create the ingested values in the same order,
-    # starting for those 3 keys by hand
-    values = []
-    values = values + extract_values_header(header, Fd=data_types.g3Fd)
-
-    # Convert the values into a long string
-    vvv = ''
-    for v in values:
-        vvv += '\"' + v + '\", '
-    vvv = vvv.rstrip(', ')
-
+    columns, values = extract_columns_values_header(header, Fd=data_types.g3Fd)
+    values_str = ", ".join(
+        f"'{v}'" if isinstance(v, str) else str(v)
+        for v in values
+    )
+    columns_str = ", ".join(columns)
     query = _insert_row.format(**{'or_replace': or_replace,
-                                  'tablename': tablename, 'values': vvv})
+                                  'tablename': tablename,
+                                  'columns': columns_str,
+                                  'values': values_str})
     logger.debug(f"Executing:{query}")
     if dryrun:
         logger.info(f"DRYRUN: {query}")
