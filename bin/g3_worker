@@ -40,6 +40,8 @@ def cmdline():
     parser.add_argument("--compute_snr_annulus", action="store_true", default=False,
                         help="Compute signal to noise maps. The noise is determined from the RMS of "
                         "an annulus around each pixel. The SNR map is then saved to each map frame.")
+    parser.add_argument("--mask_filter", action="store_true", default=False,
+                        help="Apply mask for filtered maps.")
     # Custom field Name
     parser.add_argument("--field_name", type=str, default=None,
                         help="SPT field name (optional) to overide metadata")

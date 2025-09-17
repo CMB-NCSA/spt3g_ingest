@@ -663,6 +663,7 @@ class g3worker():
                  bands=self.config.band,  # or just band
                  subtract_coadd=subtract_coadd,
                  field=self.field_season[g3file],
+                 mask=self.config.mask_filter,
                  compute_snr_annulus=self.config.compute_snr_annulus)
 
         if 'G3' in output_filetypes_run:

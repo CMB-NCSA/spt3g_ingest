@@ -1,5 +1,5 @@
 __author__ = "Felipe Menanteau"
-__version__ = "0.5.9"
+__version__ = "0.6.0"
 version = __version__
 
 from . import ingstools
