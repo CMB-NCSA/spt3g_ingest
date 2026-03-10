@@ -1,0 +1,26 @@
+[project]
+name = "spt3g_ingest"
+description = "Filtering/Ingestion/Digestion of g3 maps for SPT3G"
+urls = {source = "https://github.com/CMB-S4/spt3g_ingest"}
+authors = [
+  {name = "Felipe Menanteau", email = "felipe@illinois.edu"},
+]
+maintainers = [
+  {name = "T. Andrew Manning", email = "manninga@illinois.edu"},
+]
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+dependencies = [
+    "python-magic",
+    "pandas",
+    "scipy",
+    "numexpr",
+]
+dynamic=["version"]
+
+[project.scripts]
+g3_worker = "spt3g_ingest.scripts:g3_worker"
+
+[build-system]
+requires = ["setuptools", "setuptools-scm[simple]"]
